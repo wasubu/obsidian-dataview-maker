@@ -105,17 +105,14 @@ class StudioView extends ItemView {
     const htmlPane = splitContainer.createDiv({ cls: 'cds-editor-pane active' });
     const htmlArea = htmlPane.createEl('textarea', { cls: 'cds-textarea' });
     htmlArea.value = htmlCode;
-    htmlArea.oninput = (e: any) => { htmlCode = e.target.value; };
 
     const cssPane = splitContainer.createDiv({ cls: 'cds-editor-pane' });
     const cssArea = cssPane.createEl('textarea', { cls: 'cds-textarea' });
     cssArea.value = cssCode;
-    cssArea.oninput = (e: any) => { cssCode = e.target.value; };
 
     const jsPane = splitContainer.createDiv({ cls: 'cds-editor-pane' });
     const jsArea = jsPane.createEl('textarea', { cls: 'cds-textarea' });
     jsArea.value = jsCode;
-    jsArea.oninput = (e: any) => { jsCode = e.target.value; };
 
     // Preview Pane
     const previewWrapper = container.createDiv({ cls: 'cds-preview-pane' });
@@ -146,7 +143,20 @@ class StudioView extends ItemView {
       }
     };
 
-    // Load from Vault File
+    // Hot Reload Debounce Setup
+    let debounceTimer: any = null;
+    const triggerHotReload = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        runCode();
+      }, 250); // Re-renders preview 250ms after you stop typing
+    };
+
+    htmlArea.oninput = (e: any) => { htmlCode = e.target.value; triggerHotReload(); };
+    cssArea.oninput = (e: any) => { cssCode = e.target.value; triggerHotReload(); };
+    jsArea.oninput = (e: any) => { jsCode = e.target.value; triggerHotReload(); };
+
+	// Load from Vault File (Parses CSS, HTML, and JS back into their respective tabs)
     loadBtn.onclick = async () => {
       const selectedPath = fileSelect.value;
       if (!selectedPath) {
@@ -161,24 +171,45 @@ class StudioView extends ItemView {
         const match = content.match(/```dataviewjs([\s\S]*?)```/);
         if (match && match[1]) {
           const code = match[1];
-          // Parse out HTML, CSS, and JS sections if they contain comment markers
-          if (code.includes('// --- HTML ---')) {
-            const parts = code.split(/\/\/ --- (HTML|CSS|JS) ---/);
-            // parts[2] = html, parts[4] = css, parts[6] = js (depending on index)
-            // Let's do a robust extraction or fallback
+
+          // 1. Extract CSS from style.innerHTML = `...`
+          const cssMatch = code.match(/style\.innerHTML\s*=\s*`([\s\S]*?)`;/);
+          if (cssMatch && cssMatch[1]) {
+            cssCode = cssMatch[1];
+            cssArea.value = cssCode;
           }
-          jsCode = code.trim();
-          jsArea.value = jsCode;
+
+          // 2. Extract HTML from const htmlContent = `...`
+          const htmlMatch = code.match(/const\s+htmlContent\s*=\s*`([\s\S]*?)`;/);
+          if (htmlMatch && htmlMatch[1]) {
+            htmlCode = htmlMatch[1];
+            htmlArea.value = htmlCode;
+          }
+
+          // 3. Extract JS logic (everything after // --- JS ---)
+          const jsSplit = code.split('// --- JS ---');
+          if (jsSplit[1]) {
+            // Remove 'const container = this.container;' if present at the top
+            let cleanJs = jsSplit[1].replace(/^\s*const\s+container\s*=\s*this\.container;\s*/, '').trim();
+            jsCode = cleanJs;
+            jsArea.value = jsCode;
+          } else {
+            // Fallback if it's a plain dataviewjs script without section comments
+            jsCode = code.trim();
+            jsArea.value = jsCode;
+          }
         } else {
+          // Fallback if not wrapped in dataviewjs
           jsCode = content;
           jsArea.value = jsCode;
         }
-        new Notice(`Loaded note: ${file.name}`);
+
+        new Notice(`Successfully loaded: ${file.name}`);
         runCode();
       }
     };
 
-	// Save back to Vault Note with HTML, CSS, and JS combined
+    // Save back to Vault Note with HTML, CSS, and JS combined
     saveBtn.onclick = async () => {
       if (!this.currentFile) {
         new Notice("Please select and load a vault note first!");
@@ -200,7 +231,7 @@ class StudioView extends ItemView {
           `const htmlContent = \`${htmlCode}\`;`,
           '',
           "// --- JS ---",
-          'const container = this.container;', // <--- Maps Dataview's root element
+          'const container = this.container;',
           jsCode,
           "```"
         ].join('\n');
