@@ -45,9 +45,6 @@ export class StudioView extends ItemView {
   }
 
   /**
-   * Generates the reusable client-side helper runtime for DataviewJS
-   */
-/**
    * Universal DataviewJS Runtime Helpers (Domain-Agnostic)
    */
   getRuntimeHelpers(containerEl: HTMLElement, htmlContent: string) {
@@ -96,12 +93,13 @@ export class StudioView extends ItemView {
       createNote: async (opts: { 
         folder?: string; 
         name?: string; 
+        title?: string;
         frontmatter?: Record<string, any>; 
         content?: string; 
         open?: boolean 
       }): Promise<TFile | null> => {
         const folder = opts.folder ? opts.folder.replace(/^\/+|\/+$/g, '') : "";
-        const baseName = opts.name || opts.frontmatter?.title || opts.frontmatter?.name || "Untitled";
+        const baseName = opts.name || opts.title || opts.frontmatter?.title || opts.frontmatter?.name || "Untitled";
         try {
           if (folder && !app.vault.getAbstractFileByPath(folder)) {
             await app.vault.createFolder(folder);
@@ -218,7 +216,7 @@ export class StudioView extends ItemView {
     }
     this.dynamicCssProperties = Array.from(cssPropSet).sort();
 
-    // 4. Dynamic CSS variables active in Obsidian's theme
+    // 4. Dynamic CSS variables
     const cssVarSet = new Set<string>();
     for (const sheet of Array.from(document.styleSheets)) {
       try {
@@ -320,10 +318,6 @@ export class StudioView extends ItemView {
     return Math.max(score, 1);
   }
 
-/**
-   * Pixel-perfect code highlighter.
-   * Guarantees 100% escaping so template strings with HTML never warp line height.
-   */
   highlightCode(code: string, mode: 'html' | 'css' | 'js'): string {
     const escape = (str: string) => 
       str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -357,7 +351,6 @@ export class StudioView extends ItemView {
       );
     }
 
-    // JS mode: Strictly matches multiline backtick template literals and escapes everything else
     return code.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(`(?:\\`|[\s\S])*?`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b(?:const|let|var|function|return|if|else|for|while|import|export|class|new|async|await|try|catch|switch|case|break)\b)|(\b(?:true|false|null|undefined)\b)|(\b(?:dv|app|container|window|document|console|db|\$|\$\$)\b)|(\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)(?=\s*\()|(\b\d+\b)|([^"'/`a-zA-Z0-9_\s]+|[a-zA-Z0-9_\s]+|.)/g,
       (_m, comment, str, kw, bool, builtin, method, num, text) => {
         if (comment) return `<span class="cds-tok-comment">${escape(comment)}</span>`;
@@ -373,9 +366,6 @@ export class StudioView extends ItemView {
     );
   }
 
-  /**
-   * Validates syntax and returns error details with line numbers
-   */
   validateSyntax(code: string, mode: 'html' | 'css' | 'js'): SyntaxErrorDetail | null {
     if (!code.trim()) return null;
 
@@ -386,14 +376,11 @@ export class StudioView extends ItemView {
         let line = 1;
         const lineMatch = err.stack?.match(/<anonymous>:(\d+):(\d+)/);
         if (lineMatch && lineMatch[1]) {
-          line = Math.max(1, parseInt(lineMatch[1], 10) - 2); // Function wrapper offset
+          line = Math.max(1, parseInt(lineMatch[1], 10) - 2);
         } else {
-          // Fallback bracket matching
           const openCurl = (code.match(/{/g) || []).length;
           const closeCurl = (code.match(/}/g) || []).length;
-          if (openCurl !== closeCurl) {
-            line = code.split('\n').length;
-          }
+          if (openCurl !== closeCurl) line = code.split('\n').length;
         }
         return { line, message: err.message };
       }
@@ -439,10 +426,6 @@ export class StudioView extends ItemView {
     return null;
   }
 
-  /**
-   * Creates a code editor with line numbers, code colors, error highlighting,
-   * spellcheck disabled, and contextual autocomplete.
-   */
   createCodeEditor(
     parent: HTMLElement,
     mode: 'html' | 'css' | 'js',
@@ -450,23 +433,16 @@ export class StudioView extends ItemView {
     onChange: (val: string) => void
   ) {
     const editorRoot = parent.createDiv({ cls: 'cds-editor-wrapper' });
-
-    // Gutter for line numbers
     const gutter = editorRoot.createDiv({ cls: 'cds-gutter' });
-
-    // Inner editor container
     const editArea = editorRoot.createDiv({ cls: 'cds-code-box' });
 
-    // Syntax-highlighted display layer
     const highlightPre = editArea.createEl('pre', { cls: 'cds-highlight-layer' });
     const highlightCodeEl = highlightPre.createEl('code');
 
-    // Input Textarea
     const textarea = editArea.createEl('textarea', { cls: 'cds-textarea-layer' });
     textarea.value = initialCode;
 
-    // Turn off browser spellcheck, grammar, and force no-wrap
-    textarea.setAttribute('wrap', 'off'); // <-- CRITICAL: Stops soft-wrapping desync
+    textarea.setAttribute('wrap', 'off');
     textarea.setAttribute('spellcheck', 'false');
     textarea.setAttribute('autocapitalize', 'off');
     textarea.setAttribute('autocomplete', 'off');
@@ -474,24 +450,17 @@ export class StudioView extends ItemView {
     textarea.setAttribute('data-gramm', 'false');
     textarea.setAttribute('data-enable-grammarly', 'false');
 
-    // Error status banner
     const errorBar = editorRoot.createDiv({ cls: 'cds-error-banner' });
     errorBar.style.display = 'none';
 
     // Autocomplete dropdown
     const dropdown = editArea.createDiv({ cls: 'suggestion-container cds-autocomplete-menu' });
-    dropdown.style.cssText = `
-      position: absolute; display: none; z-index: 1000;
-      max-height: 220px; width: 280px; overflow-y: auto;
-      background: var(--background-secondary); border: 1px solid var(--background-modifier-border);
-      border-radius: var(--radius-m); box-shadow: var(--shadow-s); padding: 4px;
-    `;
 
     let activeIndex = 0;
     let filteredList: AutocompleteSuggestion[] = [];
     let replaceStartPos = 0;
 
-    // Hardware-accelerated GPU scroll sync (Zero clamping, zero drift)
+    // GPU-accelerated scroll synchronization
     const syncScroll = () => {
       highlightCodeEl.style.transform = `translate3d(-${textarea.scrollLeft}px, -${textarea.scrollTop}px, 0)`;
       gutter.scrollTop = textarea.scrollTop;
@@ -503,7 +472,6 @@ export class StudioView extends ItemView {
       const val = textarea.value;
       const lines = val.split('\n');
 
-      // Check syntax error
       const err = this.validateSyntax(val, mode);
       if (err) {
         errorBar.textContent = `⚠️ Line ${err.line}: ${err.message}`;
@@ -512,22 +480,16 @@ export class StudioView extends ItemView {
         errorBar.style.display = 'none';
       }
 
-      // Render line numbers
       gutter.empty();
       lines.forEach((_, idx) => {
         const lineNum = idx + 1;
         const lineEl = gutter.createDiv({ cls: 'cds-gutter-line', text: lineNum.toString() });
-        if (err && err.line === lineNum) {
-          lineEl.addClass('has-error');
-        }
+        if (err && err.line === lineNum) lineEl.addClass('has-error');
       });
 
-      // Syntax highlight
       highlightCodeEl.innerHTML = this.highlightCode(val, mode) + (val.endsWith('\n') ? ' ' : '');
       syncScroll();
     };
-
-
 
     const hideDropdown = () => {
       dropdown.style.display = 'none';
@@ -539,11 +501,9 @@ export class StudioView extends ItemView {
         const itemEl = child as HTMLElement;
         if (idx === activeIndex) {
           itemEl.addClass('is-selected');
-          itemEl.style.background = 'var(--background-modifier-hover)';
           itemEl.scrollIntoView({ block: 'nearest' });
         } else {
           itemEl.removeClass('is-selected');
-          itemEl.style.background = 'transparent';
         }
       });
     };
@@ -720,13 +680,10 @@ export class StudioView extends ItemView {
       replaceStartPos = pos - startOffset;
 
       filteredList = suggestions
-        .map(s => {
-          const candidate = s.displayText || s.text;
-          return {
-            ...s,
-            score: this.scoreSuggestion(candidate, activeWord, s.type)
-          };
-        })
+        .map(s => ({
+          ...s,
+          score: this.scoreSuggestion(s.displayText || s.text, activeWord, s.type)
+        }))
         .filter(s => (s.score ?? 0) > 0)
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
         .slice(0, 15);
@@ -739,33 +696,29 @@ export class StudioView extends ItemView {
       dropdown.empty();
       activeIndex = 0;
 
+      // High-contrast vibrant autocomplete rendering
       filteredList.forEach((item) => {
         const itemEl = dropdown.createDiv({ cls: 'suggestion-item' });
-        itemEl.style.cssText = `
-          padding: 6px 10px; cursor: pointer; border-radius: 4px;
-          display: flex; justify-content: space-between; align-items: center;
-          font-family: var(--font-monospace); font-size: 0.8rem;
-        `;
 
         const rawText = item.displayText || item.text;
-        const label = itemEl.createSpan();
+        const label = itemEl.createSpan({ cls: 'cds-suggest-label' });
 
         const matchIdx = rawText.toLowerCase().indexOf(activeWord);
         if (matchIdx !== -1) {
           label.createSpan({ text: rawText.substring(0, matchIdx) });
-          const highlight = label.createSpan({ text: rawText.substring(matchIdx, matchIdx + activeWord.length) });
-          highlight.style.fontWeight = '700';
-          highlight.style.color = 'var(--interactive-accent)';
+          label.createSpan({ 
+            cls: 'cds-suggest-match', 
+            text: rawText.substring(matchIdx, matchIdx + activeWord.length) 
+          });
           label.createSpan({ text: rawText.substring(matchIdx + activeWord.length) });
         } else {
           label.textContent = rawText;
         }
 
-        const badge = itemEl.createSpan({ text: item.type.toUpperCase() });
-        badge.style.cssText = `
-          font-size: 0.65rem; color: var(--text-muted); opacity: 0.8;
-          background: var(--background-primary); padding: 1px 4px; border-radius: 3px;
-        `;
+        itemEl.createSpan({ 
+          cls: 'cds-suggest-badge', 
+          text: item.type.toUpperCase() 
+        });
 
         itemEl.onmousedown = (e) => {
           e.preventDefault();
@@ -776,7 +729,7 @@ export class StudioView extends ItemView {
 
       const coords = computeCaretPosition(pos);
       dropdown.style.top = `${coords.top + 20}px`;
-      dropdown.style.left = `${Math.min(coords.left, Math.max(0, textarea.clientWidth - 290))}px`;
+      dropdown.style.left = `${Math.min(coords.left, Math.max(0, textarea.clientWidth - 295))}px`;
       dropdown.style.display = 'block';
       updateSelectionHighlight();
     });
@@ -886,8 +839,8 @@ export class StudioView extends ItemView {
   flex: 1; 
   height: 100%; 
   width: 100%; 
-  background: #1b2230 !important;             /* Dark desaturated blue */
-  border: 1px solid #283144 !important;       /* Subtle muted blue border */
+  background: #1b2230 !important;             
+  border: 1px solid #283144 !important;       
   border-radius: 6px; 
   overflow: hidden; 
   position: relative; 
@@ -991,7 +944,7 @@ textarea.cds-textarea-layer {
   width: 100% !important; 
   height: 100% !important;
   margin: 0 !important; 
-  padding: 8px 10px 40px 10px !important; /* Exact same padding as code */
+  padding: 8px 10px 40px 10px !important;
   box-sizing: border-box !important;
   font: 13px/20px var(--font-monospace) !important;
   font-family: var(--font-monospace) !important;
@@ -1018,17 +971,90 @@ textarea.cds-textarea-layer::selection {
   color: transparent !important;
 }
 
-/* Syntax Highlighting Tokens (Tuned for dark blue background) */
-.cds-tok-kw { color: #c084fc !important; font-weight: 600; }     /* Soft purple */
-.cds-tok-builtin { color: #fbbf24 !important; font-weight: 600; }/* Warm amber */
-.cds-tok-tag { color: #f87171 !important; font-weight: 600; }    /* Light coral */
-.cds-tok-prop { color: #38bdf8 !important; }                     /* Sky blue */
-.cds-tok-attr { color: #fb923c !important; }                     /* Soft orange */
-.cds-tok-str { color: #4ade80 !important; }                      /* Bright green */
+/* Syntax Highlighting Tokens */
+.cds-tok-kw { color: #c084fc !important; font-weight: 600; }     
+.cds-tok-builtin { color: #fbbf24 !important; font-weight: 600; }
+.cds-tok-tag { color: #f87171 !important; font-weight: 600; }    
+.cds-tok-prop { color: #38bdf8 !important; }                     
+.cds-tok-attr { color: #fb923c !important; }                     
+.cds-tok-str { color: #4ade80 !important; }                      
 .cds-tok-num { color: #fb923c !important; }
-.cds-tok-bool { color: #2dd4bf !important; font-weight: 600; }   /* Teal */
+.cds-tok-bool { color: #2dd4bf !important; font-weight: 600; }   
 .cds-tok-var { color: #67e8f9 !important; }
 .cds-tok-comment { color: #64748b !important; font-style: italic; }
+
+/* ==========================================================================
+   Autocomplete Menu (High-Contrast Dark Navy Palette)
+   ========================================================================== */
+.cds-autocomplete-menu {
+  position: absolute !important;
+  z-index: 1000 !important;
+  max-height: 220px !important;
+  width: 290px !important;
+  overflow-y: auto !important;
+  background: #141923 !important;                     
+  border: 1px solid #2d3748 !important;              
+  border-radius: 6px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6) !important;
+  padding: 4px !important;
+  box-sizing: border-box !important;
+}
+
+.cds-autocomplete-menu .suggestion-item {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 6px 10px !important;
+  margin: 1px 0 !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  background: transparent !important;
+  font-family: var(--font-monospace) !important;
+  font-size: 12px !important;
+  color: #e2e8f0 !important;                         
+  transition: background 0.1s ease !important;
+}
+
+.cds-autocomplete-menu .suggestion-item:hover,
+.cds-autocomplete-menu .suggestion-item.is-selected {
+  background: #25334a !important;                     
+  color: #ffffff !important;
+}
+
+.cds-autocomplete-menu .cds-suggest-label {
+  color: #e2e8f0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  margin-right: 8px !important;
+}
+
+.cds-autocomplete-menu .suggestion-item.is-selected .cds-suggest-label {
+  color: #ffffff !important;
+}
+
+.cds-autocomplete-menu .cds-suggest-match {
+  color: #38bdf8 !important;                         
+  font-weight: 700 !important;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.4) !important;
+}
+
+.cds-autocomplete-menu .cds-suggest-badge {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  padding: 2px 5px !important;
+  border-radius: 3px !important;
+  background: #1e2638 !important;
+  border: 1px solid #2d3b56 !important;
+  color: #94a3b8 !important;
+  flex-shrink: 0 !important;
+}
+
+.cds-autocomplete-menu .suggestion-item.is-selected .cds-suggest-badge {
+  background: #2b3952 !important;
+  border-color: #3b82f6 !important;
+  color: #60a5fa !important;
+}
 
 /* Status Error Banner */
 .cds-error-banner { 
@@ -1038,7 +1064,7 @@ textarea.cds-textarea-layer::selection {
   padding: 3px 8px; z-index: 10; opacity: 0.95; 
 }
 
-/* Preview Pane - Stays in Native Obsidian Styling */
+/* Preview Pane - Native Theme */
 .cds-preview-pane { 
   flex: 1; 
   border: 1px solid var(--background-modifier-border); 
@@ -1315,7 +1341,7 @@ textarea.cds-textarea-layer::selection {
       ).open();
     };
 
-saveBtn.onclick = async () => {
+    saveBtn.onclick = async () => {
       if (!this.currentFile) {
         new Notice("Please select and load a vault note first!");
         return;
@@ -1394,17 +1420,17 @@ saveBtn.onclick = async () => {
     };
 
     const switchTab = (tab: string) => {
-        htmlBtn.toggleClass('active', tab === 'html');
-        cssBtn.toggleClass('active', tab === 'css');
-        jsBtn.toggleClass('active', tab === 'js');
-        htmlPane.toggleClass('active', tab === 'html');
-        cssPane.toggleClass('active', tab === 'css');
-        jsPane.toggleClass('active', tab === 'js');
+      htmlBtn.toggleClass('active', tab === 'html');
+      cssBtn.toggleClass('active', tab === 'css');
+      jsBtn.toggleClass('active', tab === 'js');
+      htmlPane.toggleClass('active', tab === 'html');
+      cssPane.toggleClass('active', tab === 'css');
+      jsPane.toggleClass('active', tab === 'js');
 
-        // Trigger repaint to align gutters upon unhiding
-        if (tab === 'html') htmlEditor.setValue(htmlEditor.getValue());
-        if (tab === 'css') cssEditor.setValue(cssEditor.getValue());
-        if (tab === 'js') jsEditor.setValue(jsEditor.getValue());
+      // Trigger repaint to align gutters upon unhiding
+      if (tab === 'html') htmlEditor.setValue(htmlEditor.getValue());
+      if (tab === 'css') cssEditor.setValue(cssEditor.getValue());
+      if (tab === 'js') jsEditor.setValue(jsEditor.getValue());
     };
 
     htmlBtn.onclick = () => switchTab('html');
