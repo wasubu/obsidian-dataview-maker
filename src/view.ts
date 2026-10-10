@@ -31,58 +31,102 @@ export class StudioView extends ItemView {
     return { html, css, js };
   }
 
-  enhanceTextarea(textarea: HTMLTextAreaElement, suggestions: string[], onInputCallback: () => void) {
+  enhanceTextarea(textarea: HTMLTextAreaElement, suggestions: string[], isHtmlEditor = false, onInputCallback: () => void) {
     const dropdown = document.createElement('ul');
     dropdown.className = 'cds-autocomplete-dropdown';
     dropdown.style.cssText = `
       position: absolute; display: none; background: var(--background-secondary);
       border: 1px solid var(--background-modifier-border); border-radius: 6px;
       list-style: none; padding: 4px 0; margin: 0; z-index: 1000;
-      max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      max-height: 180px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
     `;
-    textarea.parentElement?.style.setProperty('position', 'relative');
-    textarea.parentElement?.appendChild(dropdown);
+    const wrapper = textarea.parentElement;
+    if (wrapper) {
+      wrapper.style.setProperty('position', 'relative');
+      wrapper.appendChild(dropdown);
+    }
 
     let activeSuggestionIndex = 0;
     let filteredSuggestions: string[] = [];
+    let queryStartPos = 0;
 
     const hideDropdown = () => {
       dropdown.style.display = 'none';
     };
 
-    const showDropdown = (word: string) => {
-      filteredSuggestions = suggestions.filter(s => s.toLowerCase().startsWith(word.toLowerCase()) && s !== word);
+    // Caret coordinate calculator for precise cursor tracking
+    // Caret coordinate calculator for precise cursor tracking
+    const getCaretCoordinates = (element: HTMLTextAreaElement, position: number) => {
+      const div = document.createElement('div');
+      const style = window.getComputedStyle(element);
+      [
+        'direction', 'boxSizing', 'width', 'height', 'overflowX', 'overflowY',
+        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderStyle',
+        'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize', 'lineHeight',
+        'fontFamily', 'textAlign', 'textTransform', 'textIndent', 'textDecoration',
+        'letterSpacing', 'wordSpacing'
+      ].forEach(prop => {
+        const val = style[prop as any];
+        if (val) {
+          div.style[prop as any] = val; // <--- Safely assigned
+        }
+      });
+      div.style.position = 'absolute';
+      div.style.visibility = 'hidden';
+      div.style.whiteSpace = 'pre-wrap';
+      div.style.wordWrap = 'break-word';
+      document.body.appendChild(div);
+
+      div.textContent = element.value.substring(0, position);
+      const span = document.createElement('span');
+      span.textContent = element.value.substring(position) || '.';
+      div.appendChild(span);
+
+      const coordinates = {
+        top: span.offsetTop - element.scrollTop + parseInt(style.paddingTop || '0'),
+        left: span.offsetLeft - element.scrollLeft + parseInt(style.paddingLeft || '0')
+      };
+      document.body.removeChild(div);
+      return coordinates;
+    };
+
+    const showDropdown = (word: string, queryPos: number, activeList: string[]) => {
+      filteredSuggestions = activeList.filter(s => s.toLowerCase().startsWith(word.toLowerCase()) && s !== word);
       if (filteredSuggestions.length === 0) {
         hideDropdown();
         return;
       }
 
+      queryStartPos = queryPos;
       dropdown.innerHTML = '';
       activeSuggestionIndex = 0;
       filteredSuggestions.forEach((item, idx) => {
         const li = document.createElement('li');
         li.textContent = item;
         li.style.cssText = `
-          padding: 4px 12px; cursor: pointer; color: var(--text-normal);
+          padding: 6px 12px; cursor: pointer; color: var(--text-normal); white-space: nowrap;
           background: ${idx === 0 ? 'var(--background-modifier-hover)' : 'transparent'};
         `;
         li.onmousedown = (e) => {
           e.preventDefault();
-          insertCompletion(item, word.length);
+          insertCompletion(item, queryStartPos);
         };
         dropdown.appendChild(li);
       });
 
+      const coords = getCaretCoordinates(textarea, textarea.selectionStart);
+      dropdown.style.top = `${coords.top + 22}px`;
+      dropdown.style.left = `${Math.min(coords.left, textarea.clientWidth - 180)}px`;
       dropdown.style.display = 'block';
     };
 
-    const insertCompletion = (completion: string, queryLength: number) => {
+    const insertCompletion = (completion: string, startPos: number) => {
       const pos = textarea.selectionStart;
       const val = textarea.value;
-      const start = pos - queryLength;
-      textarea.value = val.substring(0, start) + completion + val.substring(pos);
-      textarea.setSelectionRange(start + completion.length, start + completion.length);
+      textarea.value = val.substring(0, startPos) + completion + val.substring(pos);
+      textarea.setSelectionRange(startPos + completion.length, startPos + completion.length);
       hideDropdown();
       onInputCallback();
     };
@@ -92,9 +136,26 @@ export class StudioView extends ItemView {
       const pos = textarea.selectionStart;
       const val = textarea.value;
       const textBefore = val.substring(0, pos);
+
+      if (isHtmlEditor) {
+        // Trigger on '<' or typing tag/attribute names
+        const tagMatch = textBefore.match(/<([a-zA-Z0-9]*)$/);
+        const attrMatch = textBefore.match(/\s+([a-zA-Z0-9-]*)$/);
+
+        if (tagMatch) {
+          const htmlTags = ['div', 'span', 'button', 'input', 'select', 'option', 'img', 'a', 'p', 'h1', 'h2', 'h3', 'ul', 'li', 'table', 'tr', 'td', 'th', 'form', 'label', 'section', 'article', 'header', 'footer', 'nav'];
+          showDropdown(tagMatch[1] || '', pos - (tagMatch[1]?.length || 0), htmlTags);
+          return;
+        } else if (attrMatch && !textBefore.endsWith('>')) {
+          const htmlAttrs = ['class=', 'id=', 'src=', 'alt=', 'href=', 'style=', 'onclick=', 'placeholder=', 'value=', 'type=', 'loading="lazy"'];
+          showDropdown(attrMatch[1] || '', pos - (attrMatch[1]?.length || 0), htmlAttrs);
+          return;
+        }
+      }
+
       const match = textBefore.match(/[\w.]+$/);
       if (match && match[0].length >= 2) {
-        showDropdown(match[0]);
+        showDropdown(match[0], pos - match[0].length, suggestions);
       } else {
         hideDropdown();
       }
@@ -121,10 +182,7 @@ export class StudioView extends ItemView {
         if (e.key === 'Enter' || e.key === 'Tab') {
           if (filteredSuggestions[activeSuggestionIndex]) {
             e.preventDefault();
-            const textBefore = val.substring(0, start);
-            const match = textBefore.match(/[\w.]+$/);
-            const queryLength = match ? match[0].length : 0;
-            insertCompletion(filteredSuggestions[activeSuggestionIndex]!, queryLength);
+            insertCompletion(filteredSuggestions[activeSuggestionIndex]!, queryStartPos);
             return;
           }
         }
@@ -268,13 +326,40 @@ export class StudioView extends ItemView {
       }, 250);
     };
 
-    const jsSuggestions = ['dv.pages', 'dv.current', 'app.vault', 'app.workspace', 'container', 'htmlContent', 'Notice', 'TFile', 'console.log', 'document.createElement'];
-    const htmlSuggestions = ['div', 'span', 'button', 'class', 'id', 'img', 'src', 'alt', 'loading'];
-    const cssSuggestions = ['display: flex;', 'justify-content: ', 'align-items: ', 'background: ', 'color: ', 'border: ', 'border-radius: ', 'padding: ', 'margin: ', 'font-weight: '];
+    // Comprehensive Obsidian, DataviewJS, HTML, and CSS autocomplete keyword lists
+    const jsSuggestions = [
+      'dv.pages()', 'dv.current()', 'dv.el()', 'dv.header()', 'dv.paragraph()', 'dv.list()', 'dv.table()', 'dv.view()',
+      'app.vault', 'app.workspace', 'app.metadataCache', 'app.fileManager', 'app.plugins',
+      'app.vault.getMarkdownFiles()', 'app.vault.read()', 'app.vault.modify()', 'app.vault.create()',
+      'app.workspace.openLinkText()', 'app.workspace.getLeaf()',
+      'container', 'htmlContent', 'Notice', 'TFile', 'TFolder', 'WorkspaceLeaf',
+      'console.log', 'document.createElement', 'document.getElementById', 'querySelector', 'querySelectorAll',
+      'addEventListener', 'setTimeout', 'setInterval', 'async', 'await', 'try', 'catch'
+    ];
 
-    this.enhanceTextarea(htmlArea, htmlSuggestions, () => { htmlCode = htmlArea.value; triggerHotReload(); });
-    this.enhanceTextarea(cssArea, cssSuggestions, () => { cssCode = cssArea.value; triggerHotReload(); });
-    this.enhanceTextarea(jsArea, jsSuggestions, () => { jsCode = jsArea.value; triggerHotReload(); });
+    const htmlSuggestions = [
+      'div', 'span', 'button', 'input', 'select', 'option', 'img', 'a', 'p',
+      'h1', 'h2', 'h3', 'ul', 'li', 'table', 'tr', 'td', 'th', 'form', 'label',
+      'section', 'article', 'header', 'footer', 'nav', 'class=""', 'id=""', 'src=""', 'alt=""', 'href=""', 'loading="lazy"'
+    ];
+
+    const cssSuggestions = [
+      'display: flex;', 'display: grid;', 'display: block;', 'display: none;',
+      'justify-content: space-between;', 'justify-content: center;', 'justify-content: flex-start;', 'justify-content: space-around;',
+      'align-items: center;', 'align-items: flex-start;', 'align-items: stretch;', 'align-items: flex-end;',
+      'gap: ', 'margin: ', 'margin-bottom: ', 'margin-top: ', 'margin-left: ', 'margin-right: ',
+      'padding: ', 'padding-bottom: ', 'padding-top: ', 'padding-left: ', 'padding-right: ',
+      'background: ', 'background-color: ', 'color: ', 'border: ', 'border-radius: ',
+      'font-family: ', 'font-size: ', 'font-weight: ', 'box-shadow: ', 'cursor: pointer;',
+      'overflow: hidden;', 'transition: ', 'aspect-ratio: ', 'flex-wrap: wrap;', 'flex-grow: 1;',
+      'var(--background-primary)', 'var(--background-secondary)', 'var(--background-modifier-border)',
+      'var(--text-normal)', 'var(--text-muted)', 'var(--interactive-accent)', 'var(--text-on-accent)',
+      'var(--background-modifier-hover)', 'var(--background-modifier-form-field)'
+    ];
+
+    this.enhanceTextarea(htmlArea, htmlSuggestions, true, () => { htmlCode = htmlArea.value; triggerHotReload(); });
+    this.enhanceTextarea(cssArea, cssSuggestions, false, () => { cssCode = cssArea.value; triggerHotReload(); });
+    this.enhanceTextarea(jsArea, jsSuggestions, false, () => { jsCode = jsArea.value; triggerHotReload(); });
 
     const previewWrapper = container.createDiv({ cls: 'cds-preview-pane' });
     previewWrapper.createEl('h4', { text: 'Live Preview Output', attr: { style: 'margin-top:0; margin-bottom:8px; font-size:0.85rem; color:var(--text-muted);' } });
