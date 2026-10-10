@@ -776,18 +776,17 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       }
     })();
 
-    // ── Main Body (2 Columns when wide, 1 Column when narrow) ──
-    const mainBody = container.createDiv({ cls: 'cds-main-body' });
-
-    // Column 1: Editor Pane
-    const editorColumn = mainBody.createDiv({ cls: 'cds-editor-column' });
-    const tabHeader = editorColumn.createDiv({ cls: 'cds-tabs' });
+    // ── Row 2: Tab Buttons on their OWN full-width row ──
+    const tabHeader = container.createDiv({ cls: 'cds-tabs' });
     const htmlBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn active', text: 'HTML' });
     const cssBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'CSS' });
     const jsBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'JS Logic' });
 
-    const splitContainer = editorColumn.createDiv({ cls: 'cds-split' });
+    // ── Row 3: Two Symmetrical Columns directly under the tabs ──
+    const mainBody = container.createDiv({ cls: 'cds-main-body' });
 
+    // Column 1: Code Editor
+    const splitContainer = mainBody.createDiv({ cls: 'cds-split' });
     const htmlPane = splitContainer.createDiv({ cls: 'cds-editor-pane active' });
     const cssPane = splitContainer.createDiv({ cls: 'cds-editor-pane' });
     const jsPane = splitContainer.createDiv({ cls: 'cds-editor-pane' });
@@ -802,20 +801,9 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     const cssEditor = this.createCodeEditor(cssPane, 'css', cssCode, (val) => { cssCode = val; triggerHotReload(); }, () => htmlCode);
     const jsEditor = this.createCodeEditor(jsPane, 'js', jsCode, (val) => { jsCode = val; triggerHotReload(); }, () => htmlCode);
 
-    // Column 2: Live Preview Output
+    // Column 2: Live Preview (Starts at the exact same top height as the editor)
     const previewWrapper = mainBody.createDiv({ cls: 'cds-preview-pane' });
-    previewWrapper.style.setProperty('min-width', '0', 'important');
-    previewWrapper.style.setProperty('overflow-x', 'hidden', 'important');
-    
-    previewWrapper.createEl('h4', { 
-      text: 'Live Preview Output', 
-      attr: { style: 'margin-top:0; margin-bottom:8px; font-size:0.85rem; color:var(--text-muted);' } 
-    });
-
     const previewContainer = previewWrapper.createDiv({ cls: 'cds-preview-scroll' });
-    previewContainer.style.setProperty('min-width', '0', 'important');
-    previewContainer.style.setProperty('width', '100%', 'important');
-    previewContainer.style.setProperty('max-width', '100%', 'important');
 
     // Dynamically toggle 2-column mode based on the pane's actual pixel width
     const resizeObserver = new ResizeObserver((entries) => {

@@ -13,6 +13,7 @@
   overflow: hidden !important;
 }
 
+/* Row 1: Note & Version Toolbar */
 .cds-toolbar { 
   display: flex; 
   gap: 8px; 
@@ -36,11 +37,24 @@
   border-color: var(--interactive-accent); 
 }
 
+.cds-save-btn { 
+  background: var(--interactive-accent); 
+  color: var(--text-on-accent); 
+  border: none; 
+  padding: 5px 12px; 
+  border-radius: 4px; 
+  cursor: pointer; 
+  font-weight: 600; 
+  font-size: 0.85rem; 
+}
+
+/* Row 2: HTML / CSS / JS Tabs (Dedicated Full-Width Row) */
 .cds-tabs { 
   display: flex; 
   gap: 6px; 
   border-bottom: 1px solid var(--background-modifier-border); 
   padding-bottom: 6px; 
+  width: 100%;
 }
 
 .cds-tab-btn { 
@@ -60,25 +74,14 @@
   border-color: var(--interactive-accent); 
 }
 
-.cds-save-btn { 
-  background: var(--interactive-accent); 
-  color: var(--text-on-accent); 
-  border: none; 
-  padding: 5px 12px; 
-  border-radius: 4px; 
-  cursor: pointer; 
-  font-weight: 600; 
-  font-size: 0.85rem; 
-}
-
 /* ==========================================================================
-   Responsive Main Body Layout (1-Col vs 2-Col)
+   Row 3: Symmetrical Columns Layout (Matching Heights)
    ========================================================================== */
 
-/* Main Body Wrapper (Default: 1-Column Stacked for narrow panes & sidebars) */
+/* Main Body Container directly under tabs */
 .cds-main-body {
   display: flex;
-  flex-direction: column;
+  flex-direction: column; /* Default: stacked for narrow view */
   flex: 1;
   gap: 12px;
   min-height: 0;
@@ -86,23 +89,14 @@
   overflow: hidden;
 }
 
-/* Editor Column */
-.cds-editor-column {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 240px;
-  min-width: 0 !important;
-  gap: 6px;
-  overflow: hidden;
-}
-
+/* Left Column: Code Editor Box */
 .cds-split { 
   display: flex; 
   flex-direction: column; 
   flex: 1;
   height: 100%;
-  min-height: 0; 
+  min-height: 240px; 
+  min-width: 0 !important;
   gap: 6px; 
 }
 
@@ -119,7 +113,7 @@
   flex-direction: column; 
 }
 
-/* Preview Pane Container */
+/* Right Column: Live Preview Box (Flushed Top & Bottom to Match Editor) */
 .cds-preview-pane { 
   flex: 1; 
   display: flex !important;
@@ -131,7 +125,7 @@
   overflow-x: hidden !important; 
   padding: 12px; 
   min-height: 240px;
-  min-width: 0 !important;       /* Breaks the 600px child lock */
+  min-width: 0 !important;
   box-sizing: border-box !important;
 }
 
@@ -145,7 +139,6 @@
   box-sizing: border-box !important;
 }
 
-/* Simulated Dataview Root */
 .cds-preview-sim-root {
   display: flex !important;
   flex-direction: column !important;
@@ -156,25 +149,21 @@
   box-sizing: border-box !important;
 }
 
-/* ── 2 Columns Side-by-Side (Forces 50/50 split even if child is 600px) ── */
+/* ── 2 Columns Side-by-Side (50/50 Symmetrical Split when pane >= 850px) ── */
 .cds-main-body.is-two-column {
   flex-direction: row !important;
 }
 
-.cds-main-body.is-two-column .cds-editor-column {
-  flex: 1 1 0% !important;
-  width: 0 !important;          /* Overrides min-content width */
-  min-width: 0 !important;
-  height: 100% !important;
-}
-
 .cds-main-body.is-two-column .cds-split {
+  flex: 1 1 0% !important;
+  width: 0 !important;
+  min-width: 0 !important;
   height: 100% !important;
 }
 
 .cds-main-body.is-two-column .cds-preview-pane {
   flex: 1 1 0% !important;
-  width: 0 !important;          /* Forces preview pane to shrink to available column width */
+  width: 0 !important;
   min-width: 0 !important;
   height: 100% !important;
 }
