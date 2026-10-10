@@ -12,11 +12,16 @@ interface AutocompleteSuggestion {
   score?: number;
 }
 
+interface SyntaxErrorDetail {
+  line: number;
+  message: string;
+}
+
 export class StudioView extends ItemView {
   plugin: CustomDatabaseStudioPlugin;
   currentFile: TFile | null = null;
 
-  // Dynamically inspected collections
+  // Dynamic collections
   dynamicVaultFolders: string[] = [];
   dynamicVaultTags: string[] = [];
   dynamicFrontmatterKeys: string[] = [];
@@ -39,20 +44,14 @@ export class StudioView extends ItemView {
     return "Database Studio"; 
   }
 
-  /**
-   * Introspects browser prototypes, Obsidian theme CSS variables, 
-   * vault metadata cache, and Dataview API dynamically.
-   */
   async loadVaultIntelligence() {
-    // 1. Dynamic HTML tags from browser DOM interface prototypes
+    // 1. Dynamic HTML tags
     const htmlSet = new Set<string>();
     for (const key of Object.getOwnPropertyNames(window)) {
       const match = key.match(/^HTML([A-Za-z0-9]+)Element$/);
       if (match && match[1]) {
         const tag = match[1].toLowerCase();
-        if (tag && tag !== 'unknown' && tag !== 'heading') {
-          htmlSet.add(tag);
-        }
+        if (tag && tag !== 'unknown' && tag !== 'heading') htmlSet.add(tag);
       }
     }
     ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'span', 'p', 'a', 'img', 'ul', 'ol', 'li', 
@@ -68,15 +67,13 @@ export class StudioView extends ItemView {
     }
     this.dynamicHtmlAttributes = Array.from(attrSet).sort();
 
-    // 3. Dynamic CSS properties from CSSStyleDeclaration
+    // 3. Dynamic CSS properties
     const cssPropSet = new Set<string>();
     const styleProto = document.body.style;
     for (const prop in styleProto) {
       if (typeof styleProto[prop] === 'string' && !prop.startsWith('webkit') && !prop.startsWith('moz')) {
         const kebab = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
-        if (kebab && !kebab.startsWith('-') && isNaN(Number(kebab))) {
-          cssPropSet.add(kebab);
-        }
+        if (kebab && !kebab.startsWith('-') && isNaN(Number(kebab))) cssPropSet.add(kebab);
       }
     }
     this.dynamicCssProperties = Array.from(cssPropSet).sort();
@@ -90,17 +87,12 @@ export class StudioView extends ItemView {
           if (rule instanceof CSSStyleRule && (rule.selectorText === ':root' || rule.selectorText === 'body')) {
             for (let i = 0; i < rule.style.length; i++) {
               const varName = rule.style[i];
-              if (varName && varName.startsWith('--')) {
-                cssVarSet.add(varName);
-              }
+              if (varName && varName.startsWith('--')) cssVarSet.add(varName);
             }
           }
         }
-      } catch (e) {
-        // Cross-origin stylesheet rules might be protected
-      }
+      } catch (e) {}
     }
-    // Fallback standard Obsidian CSS variables if stylesheets are locked
     ['--background-primary', '--background-secondary', '--background-modifier-border', 
      '--background-modifier-hover', '--text-normal', '--text-muted', '--interactive-accent', 
      '--text-on-accent', '--text-error', '--font-monospace'].forEach(v => cssVarSet.add(v));
@@ -112,10 +104,10 @@ export class StudioView extends ItemView {
       const dvKeys = new Set<string>([...Object.keys(dvApi), ...Object.getOwnPropertyNames(Object.getPrototypeOf(dvApi) || {})]);
       this.dynamicDataviewApi = Array.from(dvKeys).map(k => typeof dvApi[k] === 'function' ? `dv.${k}()` : `dv.${k}`);
     } else {
-      this.dynamicDataviewApi = ['dv.pages()', 'dv.page()', 'dv.current()', 'dv.array()', 'dv.table()', 'dv.list()', 'dv.header()', 'dv.paragraph()'];
+      this.dynamicDataviewApi = ['dv.pages()', 'dv.page()', 'dv.current()', 'dv.array()', 'dv.table()', 'dv.list()', 'dv.header()'];
     }
 
-    // 6. Vault folders, tags, and frontmatter keys
+    // 6. Vault folders, tags, and properties
     const folderSet = new Set<string>();
     const allFiles = this.app.vault.getAllLoadedFiles();
     for (const file of allFiles) {
@@ -141,9 +133,6 @@ export class StudioView extends ItemView {
     this.dynamicFrontmatterKeys = Array.from(keySet).sort();
   }
 
-  /**
-   * Scans active editor buffer for user-declared tokens
-   */
   getBufferTokens(content: string): string[] {
     const matches = content.match(/\b[a-zA-Z_$][a-zA-Z0-9_$]{2,}\b/g);
     if (!matches) return [];
@@ -165,75 +154,228 @@ export class StudioView extends ItemView {
     return { html, css, js };
   }
 
-  /**
-   * Scores and ranks suggestions. Prefix matches always rank highest,
-   * followed by word-boundary matches, then substrings.
-   */
   scoreSuggestion(target: string, query: string, type: string): number {
     const text = target.toLowerCase();
     const q = query.toLowerCase();
 
     if (!q || !text.includes(q)) return 0;
-    if (text === q) return 1000; // Exact match
+    if (text === q) return 1000;
 
     let score = 0;
-
-    // 1. Prefix match (highest priority: 'div' starts with 'di')
     if (text.startsWith(q)) {
       score = 600 - (text.length - q.length) * 3;
-    }
-    // 2. Word boundary match ('flex-direction' matching 'dir', or 'dv.pages' matching 'page')
-    else if (new RegExp(`[\\-_.:]${q}`, 'i').test(text)) {
+    } else if (new RegExp(`[\\-_.:]${q}`, 'i').test(text)) {
       score = 400 - text.length * 2;
-    }
-    // 3. Substring match ('audio' containing 'di')
-    else {
+    } else {
       const idx = text.indexOf(q);
       score = 150 - (idx * 10) - (text.length * 2);
     }
 
-    // Common HTML element priority boost
     const commonHtml = new Set(['div', 'span', 'p', 'a', 'img', 'button', 'input', 'ul', 'li', 'h1', 'h2', 'h3']);
-    if (type === 'html' && commonHtml.has(text)) {
-      score += 30;
-    }
+    if (type === 'html' && commonHtml.has(text)) score += 30;
 
-    // Common CSS property priority boost
     const commonCss = new Set(['display', 'flex', 'grid', 'color', 'background', 'margin', 'padding', 'width', 'height', 'border']);
-    if (type === 'css-prop' && commonCss.has(text)) {
-      score += 30;
-    }
+    if (type === 'css-prop' && commonCss.has(text)) score += 30;
 
     return Math.max(score, 1);
   }
 
   /**
-   * Enhanced autocomplete using Obsidian native suggestion aesthetics,
-   * fuzzy prefix scoring, and context-sensitive token recognition.
+   * Fast syntax color tokenizer
    */
-  enhanceEditor(
-    textarea: HTMLTextAreaElement,
+  highlightCode(code: string, mode: 'html' | 'css' | 'js'): string {
+    const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    if (mode === 'html') {
+      return code.replace(/(<!--[\s\S]*?-->)|(<\/?[a-zA-Z0-9-]+)|([\w:-]+)(=)("[^"]*"|'[^']*')|(>|\/>)/g, 
+        (_m, comment, tag, attr, eq, val, close) => {
+          if (comment) return `<span class="cds-tok-comment">${escapeHtml(comment)}</span>`;
+          if (tag) return `<span class="cds-tok-tag">${escapeHtml(tag)}</span>`;
+          if (attr) return `<span class="cds-tok-attr">${escapeHtml(attr)}</span>${eq}<span class="cds-tok-str">${escapeHtml(val || '')}</span>`;
+          if (close) return `<span class="cds-tok-tag">${escapeHtml(close)}</span>`;
+          return escapeHtml(_m);
+        }
+      );
+    }
+
+    if (mode === 'css') {
+      return code.replace(/(\/\*[\s\S]*?\*\/)|([.#][\w-]+)|([a-zA-Z-]+)\s*(:)|("[^"]*"|'[^']*')|([0-9.]+(?:px|rem|em|%|vh|vw|s|ms)?)|(var\(--[\w-]+\))/g,
+        (_m, comment, selector, prop, colon, str, num, cssVar) => {
+          if (comment) return `<span class="cds-tok-comment">${escapeHtml(comment)}</span>`;
+          if (selector) return `<span class="cds-tok-tag">${escapeHtml(selector)}</span>`;
+          if (prop) return `<span class="cds-tok-prop">${escapeHtml(prop)}</span>${colon}`;
+          if (str) return `<span class="cds-tok-str">${escapeHtml(str)}</span>`;
+          if (num) return `<span class="cds-tok-num">${escapeHtml(num)}</span>`;
+          if (cssVar) return `<span class="cds-tok-var">${escapeHtml(cssVar)}</span>`;
+          return escapeHtml(_m);
+        }
+      );
+    }
+
+    // JS mode
+    return code.replace(/(\/\/.*|\/\*[\s\S]*?\*\/)|("[^"]*"|'[^']*'|`[\s\S]*?`)|(\b(?:const|let|var|function|return|if|else|for|while|import|export|class|new|async|await|try|catch|switch|case|break)\b)|(\b(?:true|false|null|undefined)\b)|(\b(?:dv|app|container|window|document)\b)|(\b\d+\b)/g,
+      (_m, comment, str, kw, bool, builtin, num) => {
+        if (comment) return `<span class="cds-tok-comment">${escapeHtml(comment)}</span>`;
+        if (str) return `<span class="cds-tok-str">${escapeHtml(str)}</span>`;
+        if (kw) return `<span class="cds-tok-kw">${escapeHtml(kw)}</span>`;
+        if (bool) return `<span class="cds-tok-bool">${escapeHtml(bool)}</span>`;
+        if (builtin) return `<span class="cds-tok-builtin">${escapeHtml(builtin)}</span>`;
+        if (num) return `<span class="cds-tok-num">${escapeHtml(num)}</span>`;
+        return escapeHtml(_m);
+      }
+    );
+  }
+
+  /**
+   * Validates syntax and returns error details with line numbers
+   */
+  validateSyntax(code: string, mode: 'html' | 'css' | 'js'): SyntaxErrorDetail | null {
+    if (!code.trim()) return null;
+
+    if (mode === 'js') {
+      try {
+        new Function(code);
+      } catch (err: any) {
+        let line = 1;
+        const lineMatch = err.stack?.match(/<anonymous>:(\d+):(\d+)/);
+        if (lineMatch && lineMatch[1]) {
+          line = Math.max(1, parseInt(lineMatch[1], 10) - 2); // Function wrapper offset
+        } else {
+          // Fallback bracket matching
+          const openCurl = (code.match(/{/g) || []).length;
+          const closeCurl = (code.match(/}/g) || []).length;
+          if (openCurl !== closeCurl) {
+            line = code.split('\n').length;
+          }
+        }
+        return { line, message: err.message };
+      }
+    }
+
+    if (mode === 'css') {
+      const openBraces = (code.match(/{/g) || []).length;
+      const closeBraces = (code.match(/}/g) || []).length;
+      if (openBraces !== closeBraces) {
+        return { line: code.split('\n').length, message: `Unmatched curly braces: ${openBraces} '{' vs ${closeBraces} '}'` };
+      }
+    }
+
+    if (mode === 'html') {
+      const tags = Array.from(code.matchAll(/<\/?([a-zA-Z0-9-]+)[^>]*>/g));
+      const stack: { tag: string; line: number }[] = [];
+      const selfClosing = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+      
+      const lines = code.split('\n');
+      for (const m of tags) {
+        const full = m[0];
+        const name = m[1] ? m[1].toLowerCase() : '';
+        if (selfClosing.has(name) || full.endsWith('/>')) continue;
+
+        const charIdx = m.index || 0;
+        const lineNum = code.substring(0, charIdx).split('\n').length;
+
+        if (full.startsWith('</')) {
+          if (stack.length === 0 || stack[stack.length - 1]?.tag !== name) {
+            return { line: lineNum, message: `Mismatched closing tag </${name}>` };
+          }
+          stack.pop();
+        } else {
+          stack.push({ tag: name, line: lineNum });
+        }
+      }
+      if (stack.length > 0) {
+        const unclosed = stack.pop();
+        return { line: unclosed?.line || lines.length, message: `Unclosed tag <${unclosed?.tag}>` };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Creates a code editor with line numbers, code colors, error highlighting,
+   * spellcheck disabled, and contextual autocomplete.
+   */
+  createCodeEditor(
+    parent: HTMLElement,
     mode: 'html' | 'css' | 'js',
-    onInputCallback: () => void
+    initialCode: string,
+    onChange: (val: string) => void
   ) {
-    const dropdown = document.createElement('div');
-    dropdown.className = 'suggestion-container cds-autocomplete-menu';
+    const editorRoot = parent.createDiv({ cls: 'cds-editor-wrapper' });
+
+    // Gutter for line numbers
+    const gutter = editorRoot.createDiv({ cls: 'cds-gutter' });
+
+    // Inner editor container
+    const editArea = editorRoot.createDiv({ cls: 'cds-code-box' });
+
+    // Syntax-highlighted display layer
+    const highlightPre = editArea.createEl('pre', { cls: 'cds-highlight-layer' });
+    const highlightCodeEl = highlightPre.createEl('code');
+
+    // Input Textarea
+    const textarea = editArea.createEl('textarea', { cls: 'cds-textarea-layer' });
+    textarea.value = initialCode;
+
+    // Turn off browser spellcheck and grammar underlines
+    textarea.setAttribute('spellcheck', 'false');
+    textarea.setAttribute('autocapitalize', 'off');
+    textarea.setAttribute('autocomplete', 'off');
+    textarea.setAttribute('autocorrect', 'off');
+    textarea.setAttribute('data-gramm', 'false');
+    textarea.setAttribute('data-enable-grammarly', 'false');
+
+    // Error status banner
+    const errorBar = editorRoot.createDiv({ cls: 'cds-error-banner' });
+    errorBar.style.display = 'none';
+
+    // Autocomplete dropdown
+    const dropdown = editArea.createDiv({ cls: 'suggestion-container cds-autocomplete-menu' });
     dropdown.style.cssText = `
       position: absolute; display: none; z-index: 1000;
       max-height: 220px; width: 280px; overflow-y: auto;
       background: var(--background-secondary); border: 1px solid var(--background-modifier-border);
       border-radius: var(--radius-m); box-shadow: var(--shadow-s); padding: 4px;
     `;
-    
-    const wrapper = textarea.parentElement;
-    if (wrapper) {
-      wrapper.style.setProperty('position', 'relative');
-      wrapper.appendChild(dropdown);
-    }
 
     let activeIndex = 0;
     let filteredList: AutocompleteSuggestion[] = [];
     let replaceStartPos = 0;
+
+    const renderGutterAndHighlight = () => {
+      const val = textarea.value;
+      const lines = val.split('\n');
+
+      // Check syntax error
+      const err = this.validateSyntax(val, mode);
+      if (err) {
+        errorBar.textContent = `⚠️ Line ${err.line}: ${err.message}`;
+        errorBar.style.display = 'block';
+      } else {
+        errorBar.style.display = 'none';
+      }
+
+      // Render line numbers
+      gutter.empty();
+      lines.forEach((_, idx) => {
+        const lineNum = idx + 1;
+        const lineEl = gutter.createDiv({ cls: 'cds-gutter-line', text: lineNum.toString() });
+        if (err && err.line === lineNum) {
+          lineEl.addClass('has-error');
+        }
+      });
+
+      // Syntax highlight
+      highlightCodeEl.innerHTML = this.highlightCode(val + '\n', mode);
+    };
+
+    // Scroll synchronizer
+    textarea.addEventListener('scroll', () => {
+      highlightPre.scrollTop = textarea.scrollTop;
+      highlightPre.scrollLeft = textarea.scrollLeft;
+      gutter.scrollTop = textarea.scrollTop;
+    });
 
     const hideDropdown = () => {
       dropdown.style.display = 'none';
@@ -258,165 +400,161 @@ export class StudioView extends ItemView {
       const currentPos = textarea.selectionStart;
       const text = textarea.value;
       const insertText = item.text;
-      
+
       textarea.value = text.substring(0, replaceStartPos) + insertText + text.substring(currentPos);
       const newCursorPos = replaceStartPos + insertText.length;
       textarea.setSelectionRange(newCursorPos, newCursorPos);
-      
+
       hideDropdown();
-      onInputCallback();
+      renderGutterAndHighlight();
+      onChange(textarea.value);
       textarea.focus();
     };
 
     const computeCaretPosition = (pos: number) => {
-  const div = document.createElement('div');
-  const style = window.getComputedStyle(textarea);
+      const div = document.createElement('div');
+      const style = window.getComputedStyle(textarea);
 
-  const caretStyles = [
-    'direction', 'box-sizing', 'width', 'height', 'overflow-x', 'overflow-y',
-    'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
-    'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-    'font-style', 'font-variant', 'font-weight', 'font-size', 'line-height',
-    'font-family', 'text-align', 'letter-spacing', 'word-spacing'
-  ];
+      const caretStyles = [
+        'direction', 'box-sizing', 'width', 'height', 'overflow-x', 'overflow-y',
+        'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+        'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+        'font-style', 'font-variant', 'font-weight', 'font-size', 'line-height',
+        'font-family', 'text-align', 'letter-spacing', 'word-spacing'
+      ];
 
-  caretStyles.forEach(prop => {
-    const val = style.getPropertyValue(prop);
-    if (val) {
-      div.style.setProperty(prop, val);
-    }
-  });
+      caretStyles.forEach(prop => {
+        const val = style.getPropertyValue(prop);
+        if (val) div.style.setProperty(prop, val);
+      });
 
-  div.style.position = 'absolute';
-  div.style.visibility = 'hidden';
-  div.style.whiteSpace = 'pre-wrap';
-  div.style.wordWrap = 'break-word';
-  document.body.appendChild(div);
+      div.style.position = 'absolute';
+      div.style.visibility = 'hidden';
+      div.style.whiteSpace = 'pre-wrap';
+      div.style.wordWrap = 'break-word';
+      document.body.appendChild(div);
 
-  div.textContent = textarea.value.substring(0, pos);
-  const marker = document.createElement('span');
-  marker.textContent = '|';
-  div.appendChild(marker);
+      div.textContent = textarea.value.substring(0, pos);
+      const marker = document.createElement('span');
+      marker.textContent = '|';
+      div.appendChild(marker);
 
-  const coords = {
-    top: marker.offsetTop - textarea.scrollTop + parseInt(style.paddingTop || '0', 10),
-    left: marker.offsetLeft - textarea.scrollLeft + parseInt(style.paddingLeft || '0', 10)
-  };
+      const coords = {
+        top: marker.offsetTop - textarea.scrollTop + parseInt(style.paddingTop || '0', 10),
+        left: marker.offsetLeft - textarea.scrollLeft + parseInt(style.paddingLeft || '0', 10)
+      };
 
-  document.body.removeChild(div);
-  return coords;
-};
+      document.body.removeChild(div);
+      return coords;
+    };
 
     const getSuggestionsForContext = (textBefore: string): { suggestions: AutocompleteSuggestion[], startOffset: number } => {
       const bufferWords = this.getBufferTokens(textarea.value);
 
+      if (mode === 'html') {
+        const tagMatch = textBefore.match(/<([a-zA-Z0-9-]*)$/);
+        if (tagMatch) {
+          const query = tagMatch[1] ?? '';
+          return {
+            startOffset: query.length,
+            suggestions: this.dynamicHtmlTags.map(t => ({ text: t, type: 'html' as const }))
+          };
+        }
 
-      // --- HTML CONTEXT ---
-if (mode === 'html') {
-  const tagMatch = textBefore.match(/<([a-zA-Z0-9-]*)$/);
-  if (tagMatch) {
-    const query = tagMatch[1] ?? '';
-    return {
-      startOffset: query.length,
-      suggestions: this.dynamicHtmlTags.map(t => ({ text: t, type: 'html' as const }))
-    };
-  }
+        const attrMatch = textBefore.match(/\s+([a-zA-Z0-9-]*)$/);
+        if (attrMatch && !textBefore.endsWith('>')) {
+          const query = attrMatch[1] ?? '';
+          return {
+            startOffset: query.length,
+            suggestions: this.dynamicHtmlAttributes.map(a => ({ text: `${a}=""`, displayText: a, type: 'attr' as const }))
+          };
+        }
+      }
 
-  const attrMatch = textBefore.match(/\s+([a-zA-Z0-9-]*)$/);
-  if (attrMatch && !textBefore.endsWith('>')) {
-    const query = attrMatch[1] ?? '';
-    return {
-      startOffset: query.length,
-      suggestions: this.dynamicHtmlAttributes.map(a => ({ text: `${a}=""`, displayText: a, type: 'attr' as const }))
-    };
-  }
-}
+      if (mode === 'css') {
+        const varMatch = textBefore.match(/var\((--[a-zA-Z0-9-]*)$/);
+        if (varMatch) {
+          const query = varMatch[1] ?? '';
+          return {
+            startOffset: query.length,
+            suggestions: this.dynamicCssVariables.map(v => ({ text: `${v})`, displayText: v, type: 'css-var' as const }))
+          };
+        }
 
-// --- CSS CONTEXT ---
-if (mode === 'css') {
-  const varMatch = textBefore.match(/var\((--[a-zA-Z0-9-]*)$/);
-  if (varMatch) {
-    const query = varMatch[1] ?? '';
-    return {
-      startOffset: query.length,
-      suggestions: this.dynamicCssVariables.map(v => ({ text: `${v})`, displayText: v, type: 'css-var' as const }))
-    };
-  }
+        const propMatch = textBefore.match(/([a-zA-Z-]*)$/);
+        if (propMatch) {
+          const query = propMatch[1] ?? '';
+          return {
+            startOffset: query.length,
+            suggestions: [
+              ...this.dynamicCssProperties.map(p => ({ text: `${p}: `, displayText: p, type: 'css-prop' as const })),
+              ...this.dynamicCssVariables.map(v => ({ text: `var(${v});`, displayText: v, type: 'css-var' as const }))
+            ]
+          };
+        }
+      }
 
-  const propMatch = textBefore.match(/([a-zA-Z-]*)$/);
-  if (propMatch) {
-    const query = propMatch[1] ?? '';
-    return {
-      startOffset: query.length,
-      suggestions: [
-        ...this.dynamicCssProperties.map(p => ({ text: `${p}: `, displayText: p, type: 'css-prop' as const })),
-        ...this.dynamicCssVariables.map(v => ({ text: `var(${v});`, displayText: v, type: 'css-var' as const }))
-      ]
-    };
-  }
-}
+      if (mode === 'js') {
+        if (/dv\.pages\([^)]*$/.test(textBefore)) {
+          const match = textBefore.match(/dv\.pages\(([^)]*)$/);
+          const query = match?.[1]?.replace(/["']/g, '') ?? '';
+          return {
+            startOffset: query.length,
+            suggestions: [
+              ...this.dynamicVaultFolders.map(f => ({ text: `${f})`, displayText: f, type: 'vault' as const })),
+              ...this.dynamicVaultTags.map(t => ({ text: `${t})`, displayText: t, type: 'vault' as const }))
+            ]
+          };
+        }
 
-// --- JS / DATAVIEW CONTEXT ---
-if (mode === 'js') {
-  if (/dv\.pages\([^)]*$/.test(textBefore)) {
-    const match = textBefore.match(/dv\.pages\(([^)]*)$/);
-    const query = match?.[1]?.replace(/["']/g, '') ?? '';
-    return {
-      startOffset: query.length,
-      suggestions: [
-        ...this.dynamicVaultFolders.map(f => ({ text: `${f})`, displayText: f, type: 'vault' as const })),
-        ...this.dynamicVaultTags.map(t => ({ text: `${t})`, displayText: t, type: 'vault' as const }))
-      ]
-    };
-  }
+        if (textBefore.endsWith('dv.')) {
+          return {
+            startOffset: 0,
+            suggestions: this.dynamicDataviewApi.map(api => ({
+              text: api.replace(/^dv\./, ''),
+              displayText: api,
+              type: 'dv' as const
+            }))
+          };
+        }
 
-  if (textBefore.endsWith('dv.')) {
-    return {
-      startOffset: 0,
-      suggestions: this.dynamicDataviewApi.map(api => ({
-        text: api.replace(/^dv\./, ''),
-        displayText: api,
-        type: 'dv' as const
-      }))
-    };
-  }
+        if (/(\w+)\.$/.test(textBefore)) {
+          return {
+            startOffset: 0,
+            suggestions: this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const }))
+          };
+        }
 
-  if (/(\w+)\.$/.test(textBefore)) {
-    return {
-      startOffset: 0,
-      suggestions: this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const }))
-    };
-  }
+        const tokenMatch = textBefore.match(/([a-zA-Z0-9_$]+)$/);
+        if (tokenMatch) {
+          const query = tokenMatch[1] ?? '';
+          return {
+            startOffset: query.length,
+            suggestions: [
+              ...this.dynamicDataviewApi.map(d => ({ text: d, type: 'dv' as const })),
+              ...this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const })),
+              ...bufferWords.map(w => ({ text: w, type: 'buffer' as const }))
+            ]
+          };
+        }
+      }
 
-  const tokenMatch = textBefore.match(/([a-zA-Z0-9_$]+)$/);
-  if (tokenMatch) {
-    const query = tokenMatch[1] ?? '';
-    return {
-      startOffset: query.length,
-      suggestions: [
-        ...this.dynamicDataviewApi.map(d => ({ text: d, type: 'dv' as const })),
-        ...this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const })),
-        ...bufferWords.map(w => ({ text: w, type: 'buffer' as const }))
-      ]
-    };
-  }
-}
-
-// Generic buffer word match fallback
-const wordMatch = textBefore.match(/([a-zA-Z0-9_-]+)$/);
-if (wordMatch) {
-  const query = wordMatch[1] ?? '';
-  return {
-    startOffset: query.length,
-    suggestions: bufferWords.map(w => ({ text: w, type: 'buffer' as const }))
-  };
-}
+      const wordMatch = textBefore.match(/([a-zA-Z0-9_-]+)$/);
+      if (wordMatch) {
+        const query = wordMatch[1] ?? '';
+        return {
+          startOffset: query.length,
+          suggestions: bufferWords.map(w => ({ text: w, type: 'buffer' as const }))
+        };
+      }
 
       return { suggestions: [], startOffset: 0 };
     };
 
     textarea.addEventListener('input', () => {
-      onInputCallback();
+      renderGutterAndHighlight();
+      onChange(textarea.value);
+
       const pos = textarea.selectionStart;
       const textBefore = textarea.value.substring(0, pos);
       const { suggestions, startOffset } = getSuggestionsForContext(textBefore);
@@ -429,7 +567,6 @@ if (wordMatch) {
 
       replaceStartPos = pos - startOffset;
 
-      // Score and rank all suggestions
       filteredList = suggestions
         .map(s => {
           const candidate = s.displayText || s.text;
@@ -439,7 +576,7 @@ if (wordMatch) {
           };
         })
         .filter(s => (s.score ?? 0) > 0)
-        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)) // Highest score first
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
         .slice(0, 15);
 
       if (filteredList.length === 0) {
@@ -450,7 +587,7 @@ if (wordMatch) {
       dropdown.empty();
       activeIndex = 0;
 
-      filteredList.forEach((item, idx) => {
+      filteredList.forEach((item) => {
         const itemEl = dropdown.createDiv({ cls: 'suggestion-item' });
         itemEl.style.cssText = `
           padding: 6px 10px; cursor: pointer; border-radius: 4px;
@@ -461,13 +598,10 @@ if (wordMatch) {
         const rawText = item.displayText || item.text;
         const label = itemEl.createSpan();
 
-        // Highlight the matched substring
         const matchIdx = rawText.toLowerCase().indexOf(activeWord);
         if (matchIdx !== -1) {
           label.createSpan({ text: rawText.substring(0, matchIdx) });
-          const highlight = label.createSpan({ 
-            text: rawText.substring(matchIdx, matchIdx + activeWord.length) 
-          });
+          const highlight = label.createSpan({ text: rawText.substring(matchIdx, matchIdx + activeWord.length) });
           highlight.style.fontWeight = '700';
           highlight.style.color = 'var(--interactive-accent)';
           label.createSpan({ text: rawText.substring(matchIdx + activeWord.length) });
@@ -509,32 +643,31 @@ if (wordMatch) {
           updateSelectionHighlight();
           return;
         }
-if (e.key === 'Enter' || e.key === 'Tab') {
-  const selectedItem = filteredList[activeIndex];
-  if (selectedItem) {
-    e.preventDefault();
-    insertSuggestion(selectedItem);
-    return;
-  }
-}
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          const selectedItem = filteredList[activeIndex];
+          if (selectedItem) {
+            e.preventDefault();
+            insertSuggestion(selectedItem);
+            return;
+          }
+        }
         if (e.key === 'Escape') {
           hideDropdown();
           return;
         }
       }
 
-      // Auto-indent with 2 spaces
       if (e.key === 'Tab' && dropdown.style.display !== 'block') {
         e.preventDefault();
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
         textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
         textarea.setSelectionRange(start + 2, start + 2);
-        onInputCallback();
+        renderGutterAndHighlight();
+        onChange(textarea.value);
         return;
       }
 
-      // Auto-closing brackets and quotes
       const pairs: Record<string, string> = { '"': '"', "'": "'", '(': ')', '{': '}', '[': ']', '`': '`' };
       if (pairs[e.key]) {
         const start = textarea.selectionStart;
@@ -548,13 +681,25 @@ if (e.key === 'Enter' || e.key === 'Tab') {
           textarea.value = textarea.value.substring(0, start) + e.key + pairs[e.key] + textarea.value.substring(end);
           textarea.setSelectionRange(start + 1, start + 1);
         }
-        onInputCallback();
+        renderGutterAndHighlight();
+        onChange(textarea.value);
       }
     });
 
     textarea.addEventListener('blur', () => {
       setTimeout(hideDropdown, 200);
     });
+
+    // Initial render
+    renderGutterAndHighlight();
+
+    return {
+      setValue: (val: string) => {
+        textarea.value = val;
+        renderGutterAndHighlight();
+      },
+      getValue: () => textarea.value
+    };
   }
 
   async onOpen() {
@@ -569,20 +714,109 @@ if (e.key === 'Enter' || e.key === 'Tab') {
       const style = document.createElement('style');
       style.id = styleId;
       style.innerHTML = `
-        .cds-studio-root { display: flex; flex-direction: column; height: 100%; gap: 12px; padding: 16px; box-sizing: border-box; }
-        .cds-toolbar { display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 10px; flex-wrap: wrap; }
-        .cds-select { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); color: var(--text-normal); padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; outline: none; }
-        .cds-select:focus { border-color: var(--interactive-accent); }
-        .cds-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; }
-        .cds-tab-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 6px 14px; border-radius: 4px; cursor: pointer; color: var(--text-normal); font-weight: 500; }
+                /* Layout containers */
+        .cds-studio-root { display: flex; flex-direction: column; height: 100%; gap: 10px; padding: 14px; box-sizing: border-box; }
+        .cds-toolbar { display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; flex-wrap: wrap; }
+        .cds-select { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); color: var(--text-normal); padding: 5px 8px; border-radius: 4px; font-size: 0.85rem; outline: none; }
+        .cds-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 6px; }
+        .cds-tab-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 5px 12px; border-radius: 4px; cursor: pointer; color: var(--text-normal); font-size: 0.85rem; font-weight: 500; }
         .cds-tab-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }
-        .cds-save-btn { background: var(--interactive-accent); color: var(--text-on-accent); border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; }
-        .cds-editor-pane { flex: 1; display: none; flex-direction: column; gap: 6px; position: relative; }
-        .cds-editor-pane.active { display: flex; }
-        .cds-textarea { width: 100%; flex: 1; font-family: var(--font-monospace); font-size: 0.85rem; background: var(--background-primary); color: var(--text-normal); border: 1px solid var(--background-modifier-border); border-radius: 6px; padding: 10px; resize: none; outline: none; }
-        .cds-textarea:focus { border-color: var(--interactive-accent); }
+        .cds-save-btn { background: var(--interactive-accent); color: var(--text-on-accent); border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+
+        .cds-split { display: flex; flex-direction: column; height: 50%; min-height: 240px; gap: 6px; }
+        .cds-editor-pane { flex: 1; display: none; height: 100%; min-height: 0; position: relative; }
+        .cds-editor-pane.active { display: flex; flex-direction: column; }
+
+        /* Code Editor Shell */
+        .cds-editor-wrapper { display: flex; flex: 1; height: 100%; width: 100%; border: 1px solid var(--background-modifier-border); border-radius: 6px; background: var(--background-primary); overflow: hidden; position: relative; box-sizing: border-box; }
+
+        /* Line Number Gutter */
+        .cds-gutter { width: 44px; height: 100%; flex-shrink: 0; background: var(--background-secondary); border-right: 1px solid var(--background-modifier-border); color: var(--text-muted); font-family: var(--font-monospace) !important; font-size: 13px !important; line-height: 20px !important; padding: 8px 0 !important; overflow: hidden; user-select: none; text-align: right; box-sizing: border-box; }
+        .cds-gutter-line { padding-right: 8px; height: 20px; line-height: 20px; font-size: 12px; box-sizing: border-box; }
+        .cds-gutter-line.has-error { color: var(--text-error) !important; font-weight: 700; background: rgba(255, 60, 60, 0.2); }
+
+        /* Code Display Box */
+        .cds-code-box { position: relative; flex: 1; height: 100%; width: 100%; overflow: hidden; }
+
+        /* Complete CSS Reset for Obsidian Pre & Code to stop styling conflicts */
+        pre.cds-highlight-layer {
+        all: unset !important;
+        position: absolute !important;
+        top: 0 !important; left: 0 !important;
+        width: 100% !important; height: 100% !important;
+        margin: 0 !important; padding: 8px 10px !important;
+        box-sizing: border-box !important;
+        font-family: var(--font-monospace) !important;
+        font-size: 13px !important;
+        line-height: 20px !important;
+        letter-spacing: normal !important;
+        white-space: pre !important;
+        word-wrap: normal !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+        user-select: none !important;
+        background: transparent !important;
+        border: none !important;
+        z-index: 1 !important;
+        tab-size: 2 !important;
+        }
+
+        pre.cds-highlight-layer code {
+        all: unset !important;
+        font-family: inherit !important;
+        font-size: inherit !important;
+        line-height: inherit !important;
+        white-space: pre !important;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: inline !important;
+        }
+
+        /* Typing Layer */
+        textarea.cds-textarea-layer {
+        position: absolute !important;
+        top: 0 !important; left: 0 !important;
+        width: 100% !important; height: 100% !important;
+        margin: 0 !important; padding: 8px 10px !important;
+        box-sizing: border-box !important;
+        font-family: var(--font-monospace) !important;
+        font-size: 13px !important;
+        line-height: 20px !important;
+        letter-spacing: normal !important;
+        white-space: pre !important;
+        word-wrap: normal !important;
+        overflow: auto !important;
+        background: transparent !important;
+        color: transparent !important;
+        caret-color: var(--text-normal) !important;
+        border: none !important;
+        outline: none !important;
+        resize: none !important;
+        z-index: 2 !important;
+        tab-size: 2 !important;
+        }
+        textarea.cds-textarea-layer::selection {
+        background: var(--text-selection, rgba(0, 120, 215, 0.35)) !important;
+        color: transparent !important;
+        }
+
+        /* Syntax Token Colors */
+        .cds-tok-kw { color: var(--interactive-accent); font-weight: 600; }
+        .cds-tok-builtin { color: #e5c07b; font-weight: 600; }
+        .cds-tok-tag { color: #e06c75; font-weight: 600; }
+        .cds-tok-prop { color: #61afef; }
+        .cds-tok-attr { color: #d19a66; }
+        .cds-tok-str { color: #98c379; }
+        .cds-tok-num { color: #d19a66; }
+        .cds-tok-bool { color: #56b6c2; font-weight: 600; }
+        .cds-tok-var { color: var(--text-accent); }
+        .cds-tok-comment { color: var(--text-muted); font-style: italic; }
+
+        /* Status Bar */
+        .cds-error-banner { position: absolute; bottom: 0; left: 0; right: 0; background: var(--text-error); color: white; font-family: var(--font-monospace); font-size: 0.75rem; padding: 3px 8px; z-index: 10; opacity: 0.95; }
         .cds-preview-pane { flex: 1; border: 1px solid var(--background-modifier-border); border-radius: 6px; background: var(--background-primary); overflow: auto; padding: 12px; }
-        .cds-split { display: flex; flex-direction: column; height: 45%; gap: 10px; }
       `;
       document.head.appendChild(style);
     }
@@ -626,16 +860,8 @@ if (e.key === 'Enter' || e.key === 'Tab') {
     const splitContainer = container.createDiv({ cls: 'cds-split' });
 
     const htmlPane = splitContainer.createDiv({ cls: 'cds-editor-pane active' });
-    const htmlArea = htmlPane.createEl('textarea', { cls: 'cds-textarea' });
-    htmlArea.value = htmlCode;
-
     const cssPane = splitContainer.createDiv({ cls: 'cds-editor-pane' });
-    const cssArea = cssPane.createEl('textarea', { cls: 'cds-textarea' });
-    cssArea.value = cssCode;
-
     const jsPane = splitContainer.createDiv({ cls: 'cds-editor-pane' });
-    const jsArea = jsPane.createEl('textarea', { cls: 'cds-textarea' });
-    jsArea.value = jsCode;
 
     let debounceTimer: any = null;
     const triggerHotReload = () => {
@@ -643,10 +869,9 @@ if (e.key === 'Enter' || e.key === 'Tab') {
       debounceTimer = setTimeout(() => runCode(), 250);
     };
 
-    // Attach dynamic contextual autocompletion to each editor pane
-    this.enhanceEditor(htmlArea, 'html', () => { htmlCode = htmlArea.value; triggerHotReload(); });
-    this.enhanceEditor(cssArea, 'css', () => { cssCode = cssArea.value; triggerHotReload(); });
-    this.enhanceEditor(jsArea, 'js', () => { jsCode = jsArea.value; triggerHotReload(); });
+    const htmlEditor = this.createCodeEditor(htmlPane, 'html', htmlCode, (val) => { htmlCode = val; triggerHotReload(); });
+    const cssEditor = this.createCodeEditor(cssPane, 'css', cssCode, (val) => { cssCode = val; triggerHotReload(); });
+    const jsEditor = this.createCodeEditor(jsPane, 'js', jsCode, (val) => { jsCode = val; triggerHotReload(); });
 
     const previewWrapper = container.createDiv({ cls: 'cds-preview-pane' });
     previewWrapper.createEl('h4', { text: 'Live Preview Output', attr: { style: 'margin-top:0; margin-bottom:8px; font-size:0.85rem; color:var(--text-muted);' } });
@@ -665,7 +890,6 @@ if (e.key === 'Enter' || e.key === 'Tab') {
       shadow.appendChild(bodyDiv);
 
       try {
-        // Resolve real Dataview API so live preview has access to dv
         const dvApi = (this.app as any).plugins?.plugins?.dataview?.api;
         const executeFn = new Function('container', 'htmlContent', 'app', 'notice', 'dv', jsCode);
         executeFn(bodyDiv, htmlCode, this.app, (msg: string) => new Notice(msg), dvApi);
@@ -701,18 +925,18 @@ if (e.key === 'Enter' || e.key === 'Tab') {
       if (file instanceof TFile) {
         this.currentFile = file;
         const content = await this.app.vault.read(file);
-        
+
         const match = content.match(/```dataviewjs([\s\S]*?)```/);
         if (match && match[1]) {
           const code = match[1];
 
           const cssMatch = code.match(/style\.innerHTML\s*=\s*`([\s\S]*?)`;/);
           cssCode = cssMatch && cssMatch[1] ? cssMatch[1] : "";
-          cssArea.value = cssCode;
+          cssEditor.setValue(cssCode);
 
           const htmlMatch = code.match(/const\s+htmlContent\s*=\s*`([\s\S]*?)`;/);
           htmlCode = htmlMatch && htmlMatch[1] ? htmlMatch[1] : "";
-          htmlArea.value = htmlCode;
+          htmlEditor.setValue(htmlCode);
 
           const jsSplit = code.split('// --- JS ---');
           if (jsSplit[1]) {
@@ -720,10 +944,10 @@ if (e.key === 'Enter' || e.key === 'Tab') {
           } else {
             jsCode = code.trim();
           }
-          jsArea.value = jsCode;
+          jsEditor.setValue(jsCode);
         } else {
           jsCode = content;
-          jsArea.value = jsCode;
+          jsEditor.setValue(jsCode);
         }
 
         if (!this.plugin.data.versions[file.path]) {
@@ -751,11 +975,11 @@ if (e.key === 'Enter' || e.key === 'Tab') {
       if (selectedVersion) {
         const resolved = this.resolveVersion(versions, idx);
         htmlCode = resolved.html;
-        htmlArea.value = htmlCode;
+        htmlEditor.setValue(htmlCode);
         cssCode = resolved.css;
-        cssArea.value = cssCode;
+        cssEditor.setValue(cssCode);
         jsCode = resolved.js;
-        jsArea.value = jsCode;
+        jsEditor.setValue(jsCode);
         new Notice(`Loaded version: ${selectedVersion.tag}`);
         runCode();
       }
@@ -777,7 +1001,7 @@ if (e.key === 'Enter' || e.key === 'Tab') {
 
       new VersionPromptModal(this.app, "Save as New Version", `v${nextVersionNum} - Update`, async (fullTagInput) => {
         const tag = fullTagInput.startsWith('v') ? fullTagInput : `v${nextVersionNum} - ${fullTagInput}`;
-        
+
         const newSnapshot: VersionSnapshot = {
           tag,
           html: htmlCode === parentResolved.html ? null : htmlCode,
@@ -840,15 +1064,15 @@ if (e.key === 'Enter' || e.key === 'Tab') {
         async () => {
           versions.pop();
           await this.plugin.saveStudioData();
-          
+
           const newLatestIdx = versions.length - 1;
           const resolved = this.resolveVersion(versions, newLatestIdx);
           htmlCode = resolved.html;
-          htmlArea.value = htmlCode;
+          htmlEditor.setValue(htmlCode);
           cssCode = resolved.css;
-          cssArea.value = cssCode;
+          cssEditor.setValue(cssCode);
           jsCode = resolved.js;
-          jsArea.value = jsCode;
+          jsEditor.setValue(jsCode);
           runCode();
 
           updateVersionDropdown(path, versions[newLatestIdx]?.tag);
@@ -892,12 +1116,17 @@ if (e.key === 'Enter' || e.key === 'Tab') {
     };
 
     const switchTab = (tab: string) => {
-      htmlBtn.toggleClass('active', tab === 'html');
-      cssBtn.toggleClass('active', tab === 'css');
-      jsBtn.toggleClass('active', tab === 'js');
-      htmlPane.toggleClass('active', tab === 'html');
-      cssPane.toggleClass('active', tab === 'css');
-      jsPane.toggleClass('active', tab === 'js');
+        htmlBtn.toggleClass('active', tab === 'html');
+        cssBtn.toggleClass('active', tab === 'css');
+        jsBtn.toggleClass('active', tab === 'js');
+        htmlPane.toggleClass('active', tab === 'html');
+        cssPane.toggleClass('active', tab === 'css');
+        jsPane.toggleClass('active', tab === 'js');
+
+        // Trigger repaint to align gutters upon unhiding
+        if (tab === 'html') htmlEditor.setValue(htmlEditor.getValue());
+        if (tab === 'css') cssEditor.setValue(cssEditor.getValue());
+        if (tab === 'js') jsEditor.setValue(jsEditor.getValue());
     };
 
     htmlBtn.onclick = () => switchTab('html');
