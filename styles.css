@@ -52,8 +52,6 @@
 .cds-tabs { 
   display: flex; 
   gap: 6px; 
-  border-bottom: 1px solid var(--background-modifier-border); 
-  padding-bottom: 6px; 
   width: 100%;
 }
 
