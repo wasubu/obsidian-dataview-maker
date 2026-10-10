@@ -714,109 +714,152 @@ export class StudioView extends ItemView {
       const style = document.createElement('style');
       style.id = styleId;
       style.innerHTML = `
-                /* Layout containers */
-        .cds-studio-root { display: flex; flex-direction: column; height: 100%; gap: 10px; padding: 14px; box-sizing: border-box; }
-        .cds-toolbar { display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; flex-wrap: wrap; }
-        .cds-select { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); color: var(--text-normal); padding: 5px 8px; border-radius: 4px; font-size: 0.85rem; outline: none; }
-        .cds-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 6px; }
-        .cds-tab-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 5px 12px; border-radius: 4px; cursor: pointer; color: var(--text-normal); font-size: 0.85rem; font-weight: 500; }
-        .cds-tab-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }
-        .cds-save-btn { background: var(--interactive-accent); color: var(--text-on-accent); border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+/* Studio View Root - Native Obsidian Theme */
+.cds-studio-root { display: flex; flex-direction: column; height: 100%; gap: 10px; padding: 14px; box-sizing: border-box; }
+.cds-toolbar { display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; flex-wrap: wrap; }
+.cds-select { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); color: var(--text-normal); padding: 5px 8px; border-radius: 4px; font-size: 0.85rem; outline: none; }
+.cds-select:focus { border-color: var(--interactive-accent); }
+.cds-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 6px; }
+.cds-tab-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 5px 12px; border-radius: 4px; cursor: pointer; color: var(--text-normal); font-size: 0.85rem; font-weight: 500; }
+.cds-tab-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }
+.cds-save-btn { background: var(--interactive-accent); color: var(--text-on-accent); border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
 
-        .cds-split { display: flex; flex-direction: column; height: 50%; min-height: 240px; gap: 6px; }
-        .cds-editor-pane { flex: 1; display: none; height: 100%; min-height: 0; position: relative; }
-        .cds-editor-pane.active { display: flex; flex-direction: column; }
+.cds-split { display: flex; flex-direction: column; height: 50%; min-height: 240px; gap: 6px; }
+.cds-editor-pane { flex: 1; display: none; height: 100%; min-height: 0; position: relative; }
+.cds-editor-pane.active { display: flex; flex-direction: column; }
 
-        /* Code Editor Shell */
-        .cds-editor-wrapper { display: flex; flex: 1; height: 100%; width: 100%; border: 1px solid var(--background-modifier-border); border-radius: 6px; background: var(--background-primary); overflow: hidden; position: relative; box-sizing: border-box; }
+/* ── Dark Desaturated Blue Code Editor Frame ── */
+.cds-editor-wrapper { 
+  display: flex; 
+  flex: 1; 
+  height: 100%; 
+  width: 100%; 
+  background: #1b2230 !important;             /* Dark desaturated blue */
+  border: 1px solid #283144 !important;       /* Subtle muted blue border */
+  border-radius: 6px; 
+  overflow: hidden; 
+  position: relative; 
+  box-sizing: border-box; 
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
 
-        /* Line Number Gutter */
-        .cds-gutter { width: 44px; height: 100%; flex-shrink: 0; background: var(--background-secondary); border-right: 1px solid var(--background-modifier-border); color: var(--text-muted); font-family: var(--font-monospace) !important; font-size: 13px !important; line-height: 20px !important; padding: 8px 0 !important; overflow: hidden; user-select: none; text-align: right; box-sizing: border-box; }
-        .cds-gutter-line { padding-right: 8px; height: 20px; line-height: 20px; font-size: 12px; box-sizing: border-box; }
-        .cds-gutter-line.has-error { color: var(--text-error) !important; font-weight: 700; background: rgba(255, 60, 60, 0.2); }
+/* Gutter in deeper desaturated blue */
+.cds-gutter { 
+  width: 44px; 
+  height: 100%; 
+  flex-shrink: 0; 
+  background: #151a24 !important;             /* Deeper desaturated blue */
+  border-right: 1px solid #283144 !important; 
+  color: #64748b !important;                  /* Muted slate blue line numbers */
+  font-family: var(--font-monospace) !important; 
+  font-size: 13px !important; 
+  line-height: 20px !important; 
+  padding: 8px 0 !important; 
+  overflow: hidden; 
+  user-select: none; 
+  text-align: right; 
+  box-sizing: border-box; 
+}
+.cds-gutter-line { padding-right: 8px; height: 20px; line-height: 20px; font-size: 12px; box-sizing: border-box; }
+.cds-gutter-line.has-error { color: #ff6b6b !important; font-weight: 700; background: rgba(255, 80, 80, 0.25) !important; }
 
-        /* Code Display Box */
-        .cds-code-box { position: relative; flex: 1; height: 100%; width: 100%; overflow: hidden; }
+/* Code Display Box */
+.cds-code-box { position: relative; flex: 1; height: 100%; width: 100%; overflow: hidden; background: #1b2230 !important; }
 
-        /* Complete CSS Reset for Obsidian Pre & Code to stop styling conflicts */
-        pre.cds-highlight-layer {
-        all: unset !important;
-        position: absolute !important;
-        top: 0 !important; left: 0 !important;
-        width: 100% !important; height: 100% !important;
-        margin: 0 !important; padding: 8px 10px !important;
-        box-sizing: border-box !important;
-        font-family: var(--font-monospace) !important;
-        font-size: 13px !important;
-        line-height: 20px !important;
-        letter-spacing: normal !important;
-        white-space: pre !important;
-        word-wrap: normal !important;
-        overflow: hidden !important;
-        pointer-events: none !important;
-        user-select: none !important;
-        background: transparent !important;
-        border: none !important;
-        z-index: 1 !important;
-        tab-size: 2 !important;
-        }
+/* Pre Layer Resets */
+pre.cds-highlight-layer {
+  all: unset !important;
+  position: absolute !important;
+  top: 0 !important; left: 0 !important;
+  width: 100% !important; height: 100% !important;
+  margin: 0 !important; padding: 8px 10px !important;
+  box-sizing: border-box !important;
+  font-family: var(--font-monospace) !important;
+  font-size: 13px !important;
+  line-height: 20px !important;
+  letter-spacing: normal !important;
+  white-space: pre !important;
+  word-wrap: normal !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  background: transparent !important;
+  border: none !important;
+  z-index: 1 !important;
+  tab-size: 2 !important;
+}
 
-        pre.cds-highlight-layer code {
-        all: unset !important;
-        font-family: inherit !important;
-        font-size: inherit !important;
-        line-height: inherit !important;
-        white-space: pre !important;
-        background: transparent !important;
-        border: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        display: inline !important;
-        }
+pre.cds-highlight-layer code {
+  all: unset !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  white-space: pre !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: inline !important;
+  color: #cbd5e1;                              /* Crisp light-slate text color */
+}
 
-        /* Typing Layer */
-        textarea.cds-textarea-layer {
-        position: absolute !important;
-        top: 0 !important; left: 0 !important;
-        width: 100% !important; height: 100% !important;
-        margin: 0 !important; padding: 8px 10px !important;
-        box-sizing: border-box !important;
-        font-family: var(--font-monospace) !important;
-        font-size: 13px !important;
-        line-height: 20px !important;
-        letter-spacing: normal !important;
-        white-space: pre !important;
-        word-wrap: normal !important;
-        overflow: auto !important;
-        background: transparent !important;
-        color: transparent !important;
-        caret-color: var(--text-normal) !important;
-        border: none !important;
-        outline: none !important;
-        resize: none !important;
-        z-index: 2 !important;
-        tab-size: 2 !important;
-        }
-        textarea.cds-textarea-layer::selection {
-        background: var(--text-selection, rgba(0, 120, 215, 0.35)) !important;
-        color: transparent !important;
-        }
+/* Typing Layer */
+textarea.cds-textarea-layer {
+  position: absolute !important;
+  top: 0 !important; left: 0 !important;
+  width: 100% !important; height: 100% !important;
+  margin: 0 !important; padding: 8px 10px !important;
+  box-sizing: border-box !important;
+  font-family: var(--font-monospace) !important;
+  font-size: 13px !important;
+  line-height: 20px !important;
+  letter-spacing: normal !important;
+  white-space: pre !important;
+  word-wrap: normal !important;
+  overflow: auto !important;
+  background: transparent !important;
+  color: transparent !important;
+  caret-color: #ffffff !important;
+  border: none !important;
+  outline: none !important;
+  resize: none !important;
+  z-index: 2 !important;
+  tab-size: 2 !important;
+}
+textarea.cds-textarea-layer::selection {
+  background: rgba(96, 165, 250, 0.35) !important;
+  color: transparent !important;
+}
 
-        /* Syntax Token Colors */
-        .cds-tok-kw { color: var(--interactive-accent); font-weight: 600; }
-        .cds-tok-builtin { color: #e5c07b; font-weight: 600; }
-        .cds-tok-tag { color: #e06c75; font-weight: 600; }
-        .cds-tok-prop { color: #61afef; }
-        .cds-tok-attr { color: #d19a66; }
-        .cds-tok-str { color: #98c379; }
-        .cds-tok-num { color: #d19a66; }
-        .cds-tok-bool { color: #56b6c2; font-weight: 600; }
-        .cds-tok-var { color: var(--text-accent); }
-        .cds-tok-comment { color: var(--text-muted); font-style: italic; }
+/* Syntax Highlighting Tokens (Tuned for dark blue background) */
+.cds-tok-kw { color: #c084fc !important; font-weight: 600; }     /* Soft purple */
+.cds-tok-builtin { color: #fbbf24 !important; font-weight: 600; }/* Warm amber */
+.cds-tok-tag { color: #f87171 !important; font-weight: 600; }    /* Light coral */
+.cds-tok-prop { color: #38bdf8 !important; }                     /* Sky blue */
+.cds-tok-attr { color: #fb923c !important; }                     /* Soft orange */
+.cds-tok-str { color: #4ade80 !important; }                      /* Bright green */
+.cds-tok-num { color: #fb923c !important; }
+.cds-tok-bool { color: #2dd4bf !important; font-weight: 600; }   /* Teal */
+.cds-tok-var { color: #67e8f9 !important; }
+.cds-tok-comment { color: #64748b !important; font-style: italic; }
 
-        /* Status Bar */
-        .cds-error-banner { position: absolute; bottom: 0; left: 0; right: 0; background: var(--text-error); color: white; font-family: var(--font-monospace); font-size: 0.75rem; padding: 3px 8px; z-index: 10; opacity: 0.95; }
-        .cds-preview-pane { flex: 1; border: 1px solid var(--background-modifier-border); border-radius: 6px; background: var(--background-primary); overflow: auto; padding: 12px; }
+/* Status Error Banner */
+.cds-error-banner { 
+  position: absolute; bottom: 0; left: 0; right: 0; 
+  background: #dc2626 !important; color: #ffffff !important; 
+  font-family: var(--font-monospace); font-size: 0.75rem; 
+  padding: 3px 8px; z-index: 10; opacity: 0.95; 
+}
+
+/* Preview Pane - Stays in Native Obsidian Styling */
+.cds-preview-pane { 
+  flex: 1; 
+  border: 1px solid var(--background-modifier-border); 
+  border-radius: 6px; 
+  background: var(--background-primary); 
+  overflow: auto; 
+  padding: 12px; 
+}
       `;
       document.head.appendChild(style);
     }
