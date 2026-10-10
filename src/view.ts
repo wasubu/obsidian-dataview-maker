@@ -360,7 +360,7 @@ export class StudioView extends ItemView {
       });
     };
 
-    const insertSuggestion = (item: AutocompleteSuggestion) => {
+const insertSuggestion = (item: AutocompleteSuggestion) => {
       const currentPos = textarea.selectionStart;
       const text = textarea.value;
       const insertText = item.text;
@@ -369,11 +369,20 @@ export class StudioView extends ItemView {
       
       let newCursorPos = replaceStartPos + insertText.length;
 
-      // 1. If method ends with (), place cursor inside: console.log(|)
-      if (insertText.endsWith('()')) {
+      // 1. Paired HTML tag: <div>|</div>
+      const tagCloseMatch = insertText.match(/^([a-zA-Z0-9-]+)><\/[a-zA-Z0-9-]+>$/);
+      if (tagCloseMatch && tagCloseMatch[1]) {
+        newCursorPos = replaceStartPos + tagCloseMatch[1].length + 1; // Between > and <
+      }
+      // 2. Void tag with attribute: <img src="|">
+      else if (insertText.endsWith('="">')) {
+        newCursorPos -= 2;
+      }
+      // 3. Function: console.log(|)
+      else if (insertText.endsWith('()')) {
         newCursorPos -= 1;
       }
-      // 2. If HTML attribute ends with ="", place cursor inside: class="|"
+      // 4. Attribute: class="|"
       else if (insertText.endsWith('=""')) {
         newCursorPos -= 1;
       }
@@ -618,6 +627,36 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
           // Delete both opening and closing character
           textarea.value = textarea.value.substring(0, start - 1) + textarea.value.substring(start + 1);
           textarea.setSelectionRange(start - 1, start - 1);
+          renderGutterAndHighlight();
+          onChange(textarea.value);
+          return;
+        }
+      }
+
+      // Smart Enter Indentation between { }
+      if (e.key === 'Enter' && dropdown.style.display !== 'block' && start === end && start > 0) {
+        const charBefore = textarea.value.charAt(start - 1);
+        const charAfter = textarea.value.charAt(start);
+        if (charBefore === '{' && charAfter === '}') {
+          e.preventDefault();
+          textarea.value = textarea.value.substring(0, start) + '\n  \n' + textarea.value.substring(end);
+          textarea.setSelectionRange(start + 3, start + 3);
+          renderGutterAndHighlight();
+          onChange(textarea.value);
+          return;
+        }
+      }
+
+      // HTML Auto-closing tag on typing >
+      if (mode === 'html' && e.key === '>' && start === end) {
+        const textBefore = textarea.value.substring(0, start);
+        const openTagMatch = textBefore.match(/<([a-zA-Z0-9-]+)(\s+[^>]*)?$/);
+        const voidTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+        if (openTagMatch && openTagMatch[1] && !voidTags.has(openTagMatch[1].toLowerCase())) {
+          e.preventDefault();
+          const closeTag = `></${openTagMatch[1]}>`;
+          textarea.value = textarea.value.substring(0, start) + closeTag + textarea.value.substring(end);
+          textarea.setSelectionRange(start + 1, start + 1); // Place cursor inside <div>|</div>
           renderGutterAndHighlight();
           onChange(textarea.value);
           return;
