@@ -166,6 +166,48 @@ export class StudioView extends ItemView {
   }
 
   /**
+   * Scores and ranks suggestions. Prefix matches always rank highest,
+   * followed by word-boundary matches, then substrings.
+   */
+  scoreSuggestion(target: string, query: string, type: string): number {
+    const text = target.toLowerCase();
+    const q = query.toLowerCase();
+
+    if (!q || !text.includes(q)) return 0;
+    if (text === q) return 1000; // Exact match
+
+    let score = 0;
+
+    // 1. Prefix match (highest priority: 'div' starts with 'di')
+    if (text.startsWith(q)) {
+      score = 600 - (text.length - q.length) * 3;
+    }
+    // 2. Word boundary match ('flex-direction' matching 'dir', or 'dv.pages' matching 'page')
+    else if (new RegExp(`[\\-_.:]${q}`, 'i').test(text)) {
+      score = 400 - text.length * 2;
+    }
+    // 3. Substring match ('audio' containing 'di')
+    else {
+      const idx = text.indexOf(q);
+      score = 150 - (idx * 10) - (text.length * 2);
+    }
+
+    // Common HTML element priority boost
+    const commonHtml = new Set(['div', 'span', 'p', 'a', 'img', 'button', 'input', 'ul', 'li', 'h1', 'h2', 'h3']);
+    if (type === 'html' && commonHtml.has(text)) {
+      score += 30;
+    }
+
+    // Common CSS property priority boost
+    const commonCss = new Set(['display', 'flex', 'grid', 'color', 'background', 'margin', 'padding', 'width', 'height', 'border']);
+    if (type === 'css-prop' && commonCss.has(text)) {
+      score += 30;
+    }
+
+    return Math.max(score, 1);
+  }
+
+  /**
    * Enhanced autocomplete using Obsidian native suggestion aesthetics,
    * fuzzy prefix scoring, and context-sensitive token recognition.
    */
@@ -387,11 +429,17 @@ if (wordMatch) {
 
       replaceStartPos = pos - startOffset;
 
+      // Score and rank all suggestions
       filteredList = suggestions
-        .filter(s => {
-          const check = (s.displayText || s.text).toLowerCase();
-          return check.includes(activeWord) && check !== activeWord;
+        .map(s => {
+          const candidate = s.displayText || s.text;
+          return {
+            ...s,
+            score: this.scoreSuggestion(candidate, activeWord, s.type)
+          };
         })
+        .filter(s => (s.score ?? 0) > 0)
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)) // Highest score first
         .slice(0, 15);
 
       if (filteredList.length === 0) {
@@ -410,8 +458,22 @@ if (wordMatch) {
           font-family: var(--font-monospace); font-size: 0.8rem;
         `;
 
-        const label = itemEl.createSpan({ text: item.displayText || item.text });
-        label.style.color = 'var(--text-normal)';
+        const rawText = item.displayText || item.text;
+        const label = itemEl.createSpan();
+
+        // Highlight the matched substring
+        const matchIdx = rawText.toLowerCase().indexOf(activeWord);
+        if (matchIdx !== -1) {
+          label.createSpan({ text: rawText.substring(0, matchIdx) });
+          const highlight = label.createSpan({ 
+            text: rawText.substring(matchIdx, matchIdx + activeWord.length) 
+          });
+          highlight.style.fontWeight = '700';
+          highlight.style.color = 'var(--interactive-accent)';
+          label.createSpan({ text: rawText.substring(matchIdx + activeWord.length) });
+        } else {
+          label.textContent = rawText;
+        }
 
         const badge = itemEl.createSpan({ text: item.type.toUpperCase() });
         badge.style.cssText = `
