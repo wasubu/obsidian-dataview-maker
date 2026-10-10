@@ -4,9 +4,9 @@ const VIEW_TYPE_STUDIO = "custom-database-studio-view";
 
 interface VersionSnapshot {
   tag: string;
-  html: string;
-  css: string;
-  js: string;
+  html: string | null; // null means inherited from parent delta chain
+  css: string | null;  // null means inherited from parent delta chain
+  js: string | null;   // null means inherited from parent delta chain
   timestamp: number;
 }
 
@@ -152,6 +152,22 @@ class StudioView extends ItemView {
 
   getViewType() { return VIEW_TYPE_STUDIO; }
   getDisplayText() { return "Database Studio"; }
+
+  // Helper to resolve delta chain up to target index
+  resolveVersion(versions: VersionSnapshot[], targetIdx: number) {
+    let html = "";
+    let css = "";
+    let js = "";
+    for (let i = 0; i <= targetIdx; i++) {
+      const v = versions[i];
+      if (v) {
+        if (v.html !== null) html = v.html;
+        if (v.css !== null) css = v.css;
+        if (v.js !== null) js = v.js;
+      }
+    }
+    return { html, css, js };
+  }
 
   async onOpen() {
     const container = this.contentEl;
@@ -334,7 +350,7 @@ class StudioView extends ItemView {
           jsArea.value = jsCode;
         }
 
-        // Initialize v0 version if none exist for this file yet
+        // Initialize v0 version if none exist for this file yet (Full storage for base v0)
         if (!this.plugin.data.versions[file.path]) {
           this.plugin.data.versions[file.path] = [{
             tag: "v0 - Initial",
@@ -352,25 +368,26 @@ class StudioView extends ItemView {
       }
     };
 
-    // Switch version when version dropdown changes
+    // Switch version when version dropdown changes (reconstructs state from delta chain)
     versionSelect.onchange = () => {
       if (!this.currentFile) return;
       const idx = parseInt(versionSelect.value, 10);
       const versions = this.plugin.data.versions[this.currentFile.path] || [];
       const selectedVersion = versions[idx];
       if (selectedVersion) {
-        htmlCode = selectedVersion.html;
+        const resolved = this.resolveVersion(versions, idx);
+        htmlCode = resolved.html;
         htmlArea.value = htmlCode;
-        cssCode = selectedVersion.css;
+        cssCode = resolved.css;
         cssArea.value = cssCode;
-        jsCode = selectedVersion.js;
+        jsCode = resolved.js;
         jsArea.value = jsCode;
         new Notice(`Loaded version: ${selectedVersion.tag}`);
         runCode();
       }
     };
 
-    // Save as New Version
+    // Save as New Version (Delta compressed against parent state)
     newVersionBtn.onclick = () => {
       if (!this.currentFile) {
         new Notice("Please select a note from the dropdown first!");
@@ -382,14 +399,18 @@ class StudioView extends ItemView {
       }
       const versionsArray = this.plugin.data.versions[path];
       const nextVersionNum = versionsArray ? versionsArray.length : 0;
+      const currentSelectedIdx = parseInt(versionSelect.value, 10) || (versionsArray.length - 1);
+      const parentResolved = this.resolveVersion(versionsArray, currentSelectedIdx);
 
       new VersionPromptModal(this.app, "Save as New Version", `v${nextVersionNum} - Update`, async (fullTagInput) => {
         const tag = fullTagInput.startsWith('v') ? fullTagInput : `v${nextVersionNum} - ${fullTagInput}`;
+        
+        // Delta compression: only store tab if it changed from parent resolved state
         const newSnapshot: VersionSnapshot = {
           tag,
-          html: htmlCode,
-          css: cssCode,
-          js: jsCode,
+          html: htmlCode === parentResolved.html ? null : htmlCode,
+          css: cssCode === parentResolved.css ? null : cssCode,
+          js: jsCode === parentResolved.js ? null : jsCode,
           timestamp: Date.now()
         };
 
@@ -400,7 +421,7 @@ class StudioView extends ItemView {
         await this.plugin.saveStudioData();
 
         updateVersionDropdown(path, tag);
-        new Notice(`Created version ${tag}`);
+        new Notice(`Created delta version ${tag}`);
       }).open();
     };
 
@@ -453,18 +474,17 @@ class StudioView extends ItemView {
           versions.pop();
           await this.plugin.saveStudioData();
           
-          const newLatest = versions[versions.length - 1];
-          if (newLatest) {
-            htmlCode = newLatest.html;
-            htmlArea.value = htmlCode;
-            cssCode = newLatest.css;
-            cssArea.value = cssCode;
-            jsCode = newLatest.js;
-            jsArea.value = jsCode;
-            runCode();
-          }
+          const newLatestIdx = versions.length - 1;
+          const resolved = this.resolveVersion(versions, newLatestIdx);
+          htmlCode = resolved.html;
+          htmlArea.value = htmlCode;
+          cssCode = resolved.css;
+          cssArea.value = cssCode;
+          jsCode = resolved.js;
+          jsArea.value = jsCode;
+          runCode();
 
-          updateVersionDropdown(path, newLatest?.tag);
+          updateVersionDropdown(path, versions[newLatestIdx]?.tag);
           new Notice("Successfully removed the last version.");
         }
       ).open();
