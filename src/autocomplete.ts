@@ -368,44 +368,11 @@ export class AutocompleteEngine {
       }
     }
 
-    // =========================================================================
+// =========================================================================
     // JavaScript Context
     // =========================================================================
     if (mode === 'js') {
-      // 1. Selector strings in $(), $$(), querySelector() -> Suggest HTML IDs and Classes!
-      const selectorMatch = textBefore.match(/(?:\$|\$\$|querySelector|querySelectorAll)\(\s*['"]([#.]?[a-zA-Z0-9_-]*)$/);
-      if (selectorMatch) {
-        const rawQuery = selectorMatch[1] ?? '';
-        
-        // If user typed # or nothing, suggest IDs
-        const idSuggestions = htmlIds.map(i => ({
-          text: rawQuery.startsWith('#') ? `${i}')` : `#${i}')`,
-          displayText: `#${i}`,
-          type: 'html-id' as const,
-          weight: 100
-        }));
-
-        // If user typed . or nothing, suggest Classes
-        const classSuggestions = htmlClasses.map(c => ({
-          text: rawQuery.startsWith('.') ? `${c}')` : `.${c}')`,
-          displayText: `.${c}`,
-          type: 'html-class' as const,
-          weight: 95
-        }));
-
-        const cleanQuery = rawQuery.replace(/^[#.]/, '');
-        return {
-          startOffset: cleanQuery.length,
-          suggestions: this.cleanSuggestions(
-            rawQuery.startsWith('.') ? classSuggestions : 
-            rawQuery.startsWith('#') ? idSuggestions : 
-            [...idSuggestions, ...classSuggestions],
-            cleanQuery
-          )
-        };
-      }
-
-      // 2. Vault Queries: dv.pages("...") or db.query("...")
+      // 1. Vault Queries Inside quotes: dv.pages("...") or db.query("...")
       if (/(?:dv\.pages|db\.query)\([^)]*$/.test(textBefore)) {
         const match = textBefore.match(/(?:dv\.pages|db\.query)\(([^)]*)$/);
         const query = match?.[1]?.replace(/["']/g, '') ?? '';
@@ -418,9 +385,49 @@ export class AutocompleteEngine {
         };
       }
 
+      // 2. DOM Selectors in db.renderList(), db.bindFilter(), $(), $$(), or any '#id' / '.class'
+      // Runs BEFORE isInsideString so selectors inside quotes work perfectly!
+      const selectorFnMatch = textBefore.match(/(?:\$|\$\$|querySelector|querySelectorAll|renderList|bindFilter)\(\s*['"]([#.]?[a-zA-Z0-9_-]*)$/);
+      const hashOrDotMatch = textBefore.match(/['"]([#.][a-zA-Z0-9_-]*)$/);
+      const selectorMatch = selectorFnMatch || hashOrDotMatch;
+
+      if (selectorMatch) {
+        const rawQuery = selectorMatch[1] ?? '';
+
+        const idSuggestions = htmlIds.map(i => ({
+          text: `#${i}`,
+          displayText: `#${i}`,
+          type: 'html-id' as const,
+          weight: 100
+        }));
+
+        const classSuggestions = htmlClasses.map(c => ({
+          text: `.${c}`,
+          displayText: `.${c}`,
+          type: 'html-class' as const,
+          weight: 95
+        }));
+
+        let list: AutocompleteSuggestion[] = [];
+        if (rawQuery.startsWith('.')) {
+          list = classSuggestions;
+        } else if (rawQuery.startsWith('#')) {
+          list = idSuggestions;
+        } else {
+          // If just opened quotes like db.renderList(' without # or ., show both
+          list = [...idSuggestions, ...classSuggestions];
+        }
+
+        return {
+          startOffset: rawQuery.length,
+          suggestions: this.cleanSuggestions(list, rawQuery)
+        };
+      }
+
+      // 3. Now ignore normal strings (plain text, messages, URLs)
       if (this.isInsideString(textBefore)) return { suggestions: [], startOffset: 0 };
 
-      // 3. Member Access after dot (.)
+      // 4. Member Access after dot (.)
       const dotMatch = textBefore.match(/([a-zA-Z0-9_$]+)\.([a-zA-Z0-9_$]*)$/);
       if (dotMatch) {
         const objName = dotMatch[1];
@@ -473,7 +480,7 @@ export class AutocompleteEngine {
         };
       }
 
-      // 4. TOP-LEVEL SCOPE: Keywords, User Variables & User Functions
+      // 5. Top-Level Scope (Keywords, User Variables & Functions)
       const tokenMatch = textBefore.match(/([a-zA-Z0-9_$]+)$/);
       if (tokenMatch) {
         const query = tokenMatch[1] ?? '';
