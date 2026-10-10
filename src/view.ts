@@ -16,6 +16,16 @@ export class StudioView extends ItemView {
   currentFile: TFile | null = null;
   autocompleteEngine: AutocompleteEngine;
 
+  // Universal lifecycle registry (cleans up any user animations, timers, listeners on reload)
+  private previewCleanups: Array<() => void> = [];
+
+  private runCleanups() {
+    for (const fn of this.previewCleanups) {
+      try { fn(); } catch (e) {}
+    }
+    this.previewCleanups = [];
+  }
+
   constructor(leaf: WorkspaceLeaf, plugin: CustomDatabaseStudioPlugin) {
     super(leaf);
     this.plugin = plugin;
@@ -41,6 +51,10 @@ export class StudioView extends ItemView {
     const $$ = (sel: string) => containerEl.querySelectorAll(sel);
 
     const db = {
+      // Universal teardown hook for animations, timers, and sockets
+      onCleanup: (fn: () => void) => {
+        this.previewCleanups.push(fn);
+      },
       query: (source: string, fallback: any[] = []): any[] => {
         try {
           const dv = (app as any).plugins?.plugins?.dataview?.api;
@@ -788,10 +802,21 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     const cssEditor = this.createCodeEditor(cssPane, 'css', cssCode, (val) => { cssCode = val; triggerHotReload(); }, () => htmlCode);
     const jsEditor = this.createCodeEditor(jsPane, 'js', jsCode, (val) => { jsCode = val; triggerHotReload(); }, () => htmlCode);
 
-    // Column 2: Live Preview
+    // Column 2: Live Preview Output
     const previewWrapper = mainBody.createDiv({ cls: 'cds-preview-pane' });
-    previewWrapper.createEl('h4', { text: 'Live Preview Output', attr: { style: 'margin-top:0; margin-bottom:8px; font-size:0.85rem; color:var(--text-muted);' } });
-    const previewContainer = previewWrapper.createDiv();
+    previewWrapper.style.setProperty('min-width', '0', 'important');
+    previewWrapper.style.setProperty('overflow-x', 'hidden', 'important');
+    
+    previewWrapper.createEl('h4', { 
+      text: 'Live Preview Output', 
+      attr: { style: 'margin-top:0; margin-bottom:8px; font-size:0.85rem; color:var(--text-muted);' } 
+    });
+
+    const previewContainer = previewWrapper.createDiv({ cls: 'cds-preview-scroll' });
+    previewContainer.style.setProperty('min-width', '0', 'important');
+    previewContainer.style.setProperty('width', '100%', 'important');
+    previewContainer.style.setProperty('max-width', '100%', 'important');
+
     // Dynamically toggle 2-column mode based on the pane's actual pixel width
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -803,18 +828,18 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     this.register(() => resizeObserver.disconnect());
 
     const runCode = () => {
-      // 1. Clean up active animation loops from previous runs
-      if ((window as any).__pong_raf) {
-        cancelAnimationFrame((window as any).__pong_raf);
-        (window as any).__pong_raf = null;
-      }
+      
+      this.runCleanups();
 
       previewContainer.empty();
 
       // 2. Mirror the exact Obsidian Dataview DOM container (NO Shadow DOM)
       const noteSimWrapper = previewContainer.createDiv({ 
-        cls: 'block-language-dataviewjs cds-preview-sim-root' 
+        cls: 'markdown-rendered markdown-preview-view block-language-dataviewjs cds-preview-sim-root' 
       });
+      noteSimWrapper.style.setProperty('width', '100%', 'important');
+      noteSimWrapper.style.setProperty('max-width', '100%', 'important');
+      noteSimWrapper.style.setProperty('box-sizing', 'border-box', 'important');
 
       // 3. Apply the styles dynamically to the preview container
       const previewStyleId = 'cds-preview-active-styles';
@@ -824,7 +849,16 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
         styleEl.id = previewStyleId;
         previewContainer.prepend(styleEl);
       }
-      styleEl.innerHTML = cssCode;
+// AFTER:
+// Automatically mirrors Obsidian's Markdown Reading View container width rules
+styleEl.innerHTML = `
+  .cds-preview-sim-root > * {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  ${cssCode}
+`;
 
       // 4. Inject HTML into the container exactly like Dataview does
       const { db, $, $$ } = this.getRuntimeHelpers(noteSimWrapper, htmlCode);
@@ -1150,5 +1184,7 @@ saveBtn.onclick = async () => {
     runCode();
   }
 
-  async onClose() {}
+  async onClose() {
+    this.runCleanups();
+  }
 }

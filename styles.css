@@ -82,6 +82,7 @@
   flex: 1;
   gap: 12px;
   min-height: 0;
+  min-width: 0 !important;
   overflow: hidden;
 }
 
@@ -91,6 +92,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 240px;
+  min-width: 0 !important;
   gap: 6px;
   overflow: hidden;
 }
@@ -117,35 +119,53 @@
   flex-direction: column; 
 }
 
-/* Preview Pane */
+/* Preview Pane Container */
 .cds-preview-pane { 
   flex: 1; 
+  display: flex !important;
+  flex-direction: column !important;
   border: 1px solid var(--background-modifier-border); 
   border-radius: 6px; 
   background: var(--background-primary); 
-  overflow: auto; 
+  overflow-y: auto !important; 
+  overflow-x: hidden !important; 
   padding: 12px; 
   min-height: 240px;
-}
-
-/* Simulated Dataview Root for 1:1 Live Preview */
-.cds-preview-sim-root {
-  display: flex !important;
-  flex-direction: column !important;
-  width: 100% !important;
-  min-height: 100% !important;
+  min-width: 0 !important;       /* Breaks the 600px child lock */
   box-sizing: border-box !important;
 }
 
-/* ── 2 Columns Side-by-Side (ONLY when pane width >= 850px) ── */
+.cds-preview-scroll {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Simulated Dataview Root */
+.cds-preview-sim-root {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ── 2 Columns Side-by-Side (Forces 50/50 split even if child is 600px) ── */
 .cds-main-body.is-two-column {
   flex-direction: row !important;
 }
 
 .cds-main-body.is-two-column .cds-editor-column {
-  flex: 1 1 50% !important;
+  flex: 1 1 0% !important;
+  width: 0 !important;          /* Overrides min-content width */
+  min-width: 0 !important;
   height: 100% !important;
-  min-height: 0 !important;
 }
 
 .cds-main-body.is-two-column .cds-split {
@@ -153,9 +173,10 @@
 }
 
 .cds-main-body.is-two-column .cds-preview-pane {
-  flex: 1 1 50% !important;
+  flex: 1 1 0% !important;
+  width: 0 !important;          /* Forces preview pane to shrink to available column width */
+  min-width: 0 !important;
   height: 100% !important;
-  min-height: 0 !important;
 }
 
 /* ==========================================================================
