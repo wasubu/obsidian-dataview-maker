@@ -55,6 +55,176 @@ export class StudioView extends ItemView {
       onCleanup: (fn: () => void) => {
         this.previewCleanups.push(fn);
       },
+
+      // 1. Animation Loop Manager
+      loop: (fn: (deltaTime: number, timestamp: number) => void) => {
+        let rafId: number | null = null;
+        let running = false;
+        let lastTime: number | null = null;
+
+        const frame = (time: number) => {
+          if (!running) return;
+          const delta = lastTime !== null ? (time - lastTime) : 0;
+          lastTime = time;
+          fn(delta, time);
+          if (running) {
+            rafId = requestAnimationFrame(frame);
+          }
+        };
+
+        const start = () => {
+          if (running) return controller;
+          running = true;
+          lastTime = null;
+          rafId = requestAnimationFrame(frame);
+          return controller;
+        };
+
+        const stop = () => {
+          running = false;
+          if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
+          return controller;
+        };
+
+        const toggle = () => {
+          if (running) {
+            stop();
+            return false;
+          } else {
+            start();
+            return true;
+          }
+        };
+
+        const controller = {
+          start,
+          stop,
+          toggle,
+          get isRunning() { return running; }
+        };
+
+        // Auto clean up on reload
+        this.previewCleanups.push(() => stop());
+        return controller;
+      },
+
+      // 2. One-line Canvas Setup
+      canvas: (selector: string | HTMLCanvasElement) => {
+        const canvasEl = (typeof selector === 'string' ? containerEl.querySelector(selector) : selector) as HTMLCanvasElement | null;
+        if (!canvasEl || !(canvasEl instanceof HTMLCanvasElement)) {
+          return null;
+        }
+        const ctx = canvasEl.getContext('2d');
+        return {
+          canvas: canvasEl,
+          ctx,
+          get width() { return canvasEl.width; },
+          set width(val: number) { canvasEl.width = val; },
+          get height() { return canvasEl.height; },
+          set height(val: number) { canvasEl.height = val; },
+          clear: (color?: string) => {
+            if (!ctx) return;
+            if (color) {
+              ctx.fillStyle = color;
+              ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+            } else {
+              ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+            }
+          }
+        };
+      },
+
+      // 3. Scoped Keyboard Listener
+      onKey: (keys: string | string[] | ((e: KeyboardEvent) => void), fn?: (e: KeyboardEvent) => void, options?: boolean | AddEventListenerOptions) => {
+        let targetFn: (e: KeyboardEvent) => void;
+        let keyList: string[] | null = null;
+
+        if (typeof keys === 'function') {
+          targetFn = keys;
+        } else {
+          targetFn = fn!;
+          keyList = Array.isArray(keys) ? keys.map(k => k.toLowerCase()) : [keys.toLowerCase()];
+        }
+
+        const handler = (e: KeyboardEvent) => {
+          if (!keyList || keyList.includes(e.key.toLowerCase()) || keyList.includes(e.code.toLowerCase())) {
+            targetFn(e);
+          }
+        };
+
+        window.addEventListener('keydown', handler, options);
+        const unbind = () => window.removeEventListener('keydown', handler, options);
+        this.previewCleanups.push(unbind);
+        return unbind;
+      },
+
+      // 4. Web Audio Synthesizer (Zero Audio Files)
+      beep: (frequency = 440, duration = 0.1, type: OscillatorType = 'sine', volume = 0.1) => {
+        try {
+          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+          if (!AudioCtx) return;
+          if (!(window as any).__cds_audio_ctx || (window as any).__cds_audio_ctx.state === 'closed') {
+            (window as any).__cds_audio_ctx = new AudioCtx();
+          }
+          const ctx = (window as any).__cds_audio_ctx;
+          if (ctx.state === 'suspended') {
+            ctx.resume();
+          }
+          const dur = duration > 10 ? duration / 1000 : duration; // supports seconds or ms
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = type;
+          osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+          gain.gain.setValueAtTime(volume, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + dur);
+        } catch (e) {}
+      },
+
+      // 5. Persistent Namespaced Storage
+      storage: (namespace = 'default') => {
+        const prefix = `cds_${namespace}_`;
+        return {
+          get: <T = any>(key: string, defaultValue?: T): T => {
+            try {
+              const val = localStorage.getItem(prefix + key);
+              if (val === null) return defaultValue as T;
+              return JSON.parse(val);
+            } catch (e) {
+              return defaultValue as T;
+            }
+          },
+          set: (key: string, value: any) => {
+            try {
+              localStorage.setItem(prefix + key, JSON.stringify(value));
+            } catch (e) {}
+          },
+          remove: (key: string) => {
+            try {
+              localStorage.removeItem(prefix + key);
+            } catch (e) {}
+          },
+          clear: () => {
+            try {
+              const keysToRemove: string[] = [];
+              for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith(prefix)) keysToRemove.push(k);
+              }
+              keysToRemove.forEach(k => localStorage.removeItem(k));
+            } catch (e) {}
+          }
+        };
+      },
+
       query: (source: string, fallback: any[] = []): any[] => {
         try {
           const dv = (app as any).plugins?.plugins?.dataview?.api;
@@ -299,7 +469,7 @@ export class StudioView extends ItemView {
     mode: 'html' | 'css' | 'js',
     initialCode: string,
     onChange: (val: string) => void,
-    getHtmlCode?: () => string // <-- ADD THIS
+    getHtmlCode?: () => string
   ) {
     const editorRoot = parent.createDiv({ cls: 'cds-editor-wrapper' });
     const gutter = editorRoot.createDiv({ cls: 'cds-gutter' });
@@ -375,7 +545,7 @@ export class StudioView extends ItemView {
       });
     };
 
-const insertSuggestion = (item: AutocompleteSuggestion) => {
+    const insertSuggestion = (item: AutocompleteSuggestion) => {
       const currentPos = textarea.selectionStart;
       const text = textarea.value;
       const insertText = item.text;
@@ -384,21 +554,14 @@ const insertSuggestion = (item: AutocompleteSuggestion) => {
       
       let newCursorPos = replaceStartPos + insertText.length;
 
-      // 1. Paired HTML tag: <div>|</div>
       const tagCloseMatch = insertText.match(/^([a-zA-Z0-9-]+)><\/[a-zA-Z0-9-]+>$/);
       if (tagCloseMatch && tagCloseMatch[1]) {
-        newCursorPos = replaceStartPos + tagCloseMatch[1].length + 1; // Between > and <
-      }
-      // 2. Void tag with attribute: <img src="|">
-      else if (insertText.endsWith('="">')) {
+        newCursorPos = replaceStartPos + tagCloseMatch[1].length + 1;
+      } else if (insertText.endsWith('="">')) {
         newCursorPos -= 2;
-      }
-      // 3. Function: console.log(|)
-      else if (insertText.endsWith('()')) {
+      } else if (insertText.endsWith('()')) {
         newCursorPos -= 1;
-      }
-      // 4. Attribute: class="|"
-      else if (insertText.endsWith('=""')) {
+      } else if (insertText.endsWith('=""')) {
         newCursorPos -= 1;
       }
 
@@ -447,20 +610,18 @@ const insertSuggestion = (item: AutocompleteSuggestion) => {
       return coords;
     };
 
-textarea.addEventListener('input', () => {
+    textarea.addEventListener('input', () => {
       renderGutterAndHighlight();
       onChange(textarea.value);
 
       const pos = textarea.selectionStart;
       const textBefore = textarea.value.substring(0, pos);
 
-      // NEVER open dropdown if cursor is directly on a space, tab, newline, or semicolon
       if (/[\s;\n]$/.test(textBefore)) {
         hideDropdown();
         return;
       }
 
-      // 1. Get suggestions through dedicated engine
       const { suggestions, startOffset } = this.autocompleteEngine.getSuggestions(textBefore, textarea.value, mode, getHtmlCode ? getHtmlCode() : '');
 
       if (suggestions.length === 0) {
@@ -470,7 +631,6 @@ textarea.addEventListener('input', () => {
 
       const activeWord = textBefore.substring(pos - startOffset).toLowerCase();
 
-      // Only close if there's no word AND no trigger context (like dot or tag)
       if (startOffset > 0 && (!activeWord || activeWord.length < 1)) {
         hideDropdown();
         return;
@@ -478,7 +638,6 @@ textarea.addEventListener('input', () => {
 
       replaceStartPos = pos - startOffset;
 
-      // 2. Score using smart weights (if empty after dot, show all ranked by popularity)
       if (activeWord === '') {
         filteredList = suggestions.slice(0, 15);
       } else {
@@ -500,7 +659,6 @@ textarea.addEventListener('input', () => {
       dropdown.empty();
       activeIndex = 0;
 
-      // Render suggestions
       filteredList.forEach((item) => {
         const itemEl = dropdown.createDiv({ cls: 'suggestion-item' });
 
@@ -520,7 +678,6 @@ textarea.addEventListener('input', () => {
             label.textContent = rawText;
           }
         } else {
-          // Triggered immediately upon typing dot (.) with nothing typed yet
           label.textContent = rawText;
         }
 
@@ -539,7 +696,6 @@ textarea.addEventListener('input', () => {
       const coords = computeCaretPosition(pos);
       dropdown.style.display = 'block';
 
-      // Smart Viewport Collision Detection
       const editorHeight = editArea.clientHeight;
       const editorWidth = editArea.clientWidth;
       const menuHeight = dropdown.offsetHeight || 200;
@@ -547,7 +703,7 @@ textarea.addEventListener('input', () => {
 
       let topPos = coords.top + 22;
       if (topPos + menuHeight > editorHeight && coords.top - menuHeight > 0) {
-        topPos = coords.top - menuHeight - 6; // Flip above cursor
+        topPos = coords.top - menuHeight - 6;
       }
 
       topPos = Math.max(4, Math.min(topPos, Math.max(4, editorHeight - menuHeight - 6)));
@@ -558,20 +714,17 @@ textarea.addEventListener('input', () => {
       updateSelectionHighlight();
     });
 
-textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+    textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
 
-      // =========================================================================
-      // 1. Autocomplete Menu Navigation
-      // =========================================================================
       if (dropdown.style.display === 'block') {
         if (e.key === 'Tab') {
           e.preventDefault();
           if (e.shiftKey) {
-            activeIndex = (activeIndex - 1 + filteredList.length) % filteredList.length; // Shift+Tab: Backward
+            activeIndex = (activeIndex - 1 + filteredList.length) % filteredList.length;
           } else {
-            activeIndex = (activeIndex + 1) % filteredList.length; // Tab: Forward
+            activeIndex = (activeIndex + 1) % filteredList.length;
           }
           updateSelectionHighlight();
           return;
@@ -605,14 +758,10 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
         }
       }
 
-      // Pressing Space closes the autocomplete dropdown immediately
       if (e.key === ' ' && dropdown.style.display === 'block') {
         hideDropdown();
       }
 
-      // =========================================================================
-      // 2. Tab 2-Space Indentation (When menu is closed)
-      // =========================================================================
       if (e.key === 'Tab' && dropdown.style.display !== 'block') {
         e.preventDefault();
         textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
@@ -622,35 +771,20 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
         return;
       }
 
-      // =========================================================================
-      // 3. Skip Over Existing Closing Character (Overtyping ", ', `, ), ], })
-      // =========================================================================
       const closers = new Set(['"', "'", '`', ')', ']', '}']);
       if (start === end && closers.has(e.key) && textarea.value.charAt(start) === e.key) {
         e.preventDefault();
-        textarea.setSelectionRange(start + 1, start + 1); // Jump right outside
+        textarea.setSelectionRange(start + 1, start + 1);
         return;
       }
 
-      // =========================================================================
-      // 4. Backspace Pair Deletion (Deletes both if cursor is between {})
-      // =========================================================================
       if (e.key === 'Backspace' && start === end && start > 0) {
         const charBefore = textarea.value.charAt(start - 1);
         const charAfter = textarea.value.charAt(start);
-
-        const pairMap: Record<string, string> = {
-          '{': '}',
-          '[': ']',
-          '(': ')',
-          '"': '"',
-          "'": "'",
-          '`': '`'
-        };
+        const pairMap: Record<string, string> = { '{': '}', '[': ']', '(': ')', '"': '"', "'": "'", '`': '`' };
 
         if (pairMap[charBefore] && pairMap[charBefore] === charAfter) {
           e.preventDefault();
-          // Delete both opening and closing character
           textarea.value = textarea.value.substring(0, start - 1) + textarea.value.substring(start + 1);
           textarea.setSelectionRange(start - 1, start - 1);
           renderGutterAndHighlight();
@@ -659,7 +793,6 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
         }
       }
 
-      // Smart Enter Indentation between { }
       if (e.key === 'Enter' && dropdown.style.display !== 'block' && start === end && start > 0) {
         const charBefore = textarea.value.charAt(start - 1);
         const charAfter = textarea.value.charAt(start);
@@ -673,7 +806,6 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
         }
       }
 
-      // HTML Auto-closing tag on typing >
       if (mode === 'html' && e.key === '>' && start === end) {
         const textBefore = textarea.value.substring(0, start);
         const openTagMatch = textBefore.match(/<([a-zA-Z0-9-]+)(\s+[^>]*)?$/);
@@ -682,26 +814,21 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
           e.preventDefault();
           const closeTag = `></${openTagMatch[1]}>`;
           textarea.value = textarea.value.substring(0, start) + closeTag + textarea.value.substring(end);
-          textarea.setSelectionRange(start + 1, start + 1); // Place cursor inside <div>|</div>
+          textarea.setSelectionRange(start + 1, start + 1);
           renderGutterAndHighlight();
           onChange(textarea.value);
           return;
         }
       }
 
-      // =========================================================================
-      // 5. Auto-Closing Pairs Insertion
-      // =========================================================================
       const pairs: Record<string, string> = { '"': '"', "'": "'", '(': ')', '{': '}', '[': ']', '`': '`' };
       if (pairs[e.key]) {
         e.preventDefault();
         if (start !== end) {
-          // Wrap selected text: (selected) or "selected"
           const selected = textarea.value.substring(start, end);
           textarea.value = textarea.value.substring(0, start) + e.key + selected + pairs[e.key] + textarea.value.substring(end);
           textarea.setSelectionRange(start + 1, end + 1);
         } else {
-          // Insert pair and place cursor between: {|}
           textarea.value = textarea.value.substring(0, start) + e.key + pairs[e.key] + textarea.value.substring(end);
           textarea.setSelectionRange(start + 1, start + 1);
         }
@@ -714,12 +841,10 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       setTimeout(hideDropdown, 200);
     });
 
-    // Clicking anywhere in the textarea closes the dropdown
     textarea.addEventListener('click', () => {
       hideDropdown();
     });
 
-    // Clicking anywhere outside the dropdown in Obsidian closes it
     const onOutsideClick = (evt: MouseEvent) => {
       if (!dropdown.contains(evt.target as Node) && evt.target !== textarea) {
         hideDropdown();
@@ -759,9 +884,8 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     versionSelect.createEl('option', { text: '-- Select Version --', attr: { value: '', disabled: true } });
 
     const newVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: '+ Save as New' });
-    newVersionBtn.style.display = 'none'; // Hidden by default
+    newVersionBtn.style.display = 'none';
 
-    // Checks if editor code differs from the currently selected version snapshot
     const checkUnsavedChanges = () => {
       if (!this.currentFile) {
         newVersionBtn.style.display = 'none';
@@ -801,20 +925,17 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
           if (content.includes('dataviewjs')) {
             fileSelect.createEl('option', { text: file.path, attr: { value: file.path } });
           }
-} catch (e) {}
+        } catch (e) {}
       }
     })();
 
-    // ── Row 2: Tab Buttons on their OWN full-width row ──
     const tabHeader = container.createDiv({ cls: 'cds-tabs' });
     const htmlBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn active', text: 'HTML' });
     const cssBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'CSS' });
     const jsBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'JS Logic' });
 
-    // ── Row 3: Two Symmetrical Columns directly under the tabs ──
     const mainBody = container.createDiv({ cls: 'cds-main-body' });
 
-    // Column 1: Code Editor
     const splitContainer = mainBody.createDiv({ cls: 'cds-split' });
     const htmlPane = splitContainer.createDiv({ cls: 'cds-editor-pane active' });
     const cssPane = splitContainer.createDiv({ cls: 'cds-editor-pane' });
@@ -844,11 +965,9 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       checkUnsavedChanges(); 
     }, () => htmlCode);
 
-    // Column 2: Live Preview (Starts at the exact same top height as the editor)
     const previewWrapper = mainBody.createDiv({ cls: 'cds-preview-pane' });
     const previewContainer = previewWrapper.createDiv({ cls: 'cds-preview-scroll' });
 
-    // Dynamically toggle 2-column mode based on the pane's actual pixel width
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const paneWidth = entry.contentRect.width;
@@ -859,12 +978,9 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     this.register(() => resizeObserver.disconnect());
 
     const runCode = () => {
-      
       this.runCleanups();
-
       previewContainer.empty();
 
-      // 2. Mirror the exact Obsidian Dataview DOM container (NO Shadow DOM)
       const noteSimWrapper = previewContainer.createDiv({ 
         cls: 'markdown-rendered markdown-preview-view block-language-dataviewjs cds-preview-sim-root' 
       });
@@ -872,7 +988,6 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       noteSimWrapper.style.setProperty('max-width', '100%', 'important');
       noteSimWrapper.style.setProperty('box-sizing', 'border-box', 'important');
 
-      // 3. Apply the styles dynamically to the preview container
       const previewStyleId = 'cds-preview-active-styles';
       let styleEl = previewContainer.querySelector(`#${previewStyleId}`) as HTMLStyleElement | null;
       if (!styleEl) {
@@ -880,22 +995,19 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
         styleEl.id = previewStyleId;
         previewContainer.prepend(styleEl);
       }
-// AFTER:
-// Automatically mirrors Obsidian's Markdown Reading View container width rules
-styleEl.innerHTML = `
-  .cds-preview-sim-root > * {
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
-  ${cssCode}
-`;
 
-      // 4. Inject HTML into the container exactly like Dataview does
+      styleEl.innerHTML = `
+        .cds-preview-sim-root > * {
+          width: 100% !important;
+          max-width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        ${cssCode}
+      `;
+
       const { db, $, $$ } = this.getRuntimeHelpers(noteSimWrapper, htmlCode);
       (window as any).db = db;
 
-      // 5. Execute with the exact same 'this' context as Dataview
       try {
         const dvApi = (this.app as any).plugins?.plugins?.dataview?.api;
         const dataviewContext = {
@@ -976,7 +1088,6 @@ styleEl.innerHTML = `
           await this.plugin.saveStudioData();
         }
 
-        // Select the latest version by default
         const versions = this.plugin.data.versions[file.path] || [];
         const latestTag = versions[versions.length - 1]?.tag;
         updateVersionDropdown(file.path, latestTag);
@@ -1032,7 +1143,7 @@ styleEl.innerHTML = `
 
         this.plugin.data.versions[path]!.push(newSnapshot);
         await this.plugin.saveStudioData();
-        checkUnsavedChanges(); // Hides button because changes are now saved to the new version
+        checkUnsavedChanges();
 
         updateVersionDropdown(path, tag);
         new Notice(`Created delta version ${tag}`);
@@ -1102,7 +1213,7 @@ styleEl.innerHTML = `
       ).open();
     };
 
-saveBtn.onclick = async () => {
+    saveBtn.onclick = async () => {
       if (!this.currentFile) {
         new Notice("Please select and load a vault note first!");
         return;
@@ -1110,13 +1221,11 @@ saveBtn.onclick = async () => {
       try {
         const uniqueId = `cds-style-${this.currentFile.basename.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
-        // 1. Immediately hot-reload the style in Obsidian's DOM if the note is currently open
         const activeStyleEl = document.getElementById(uniqueId) as HTMLStyleElement | null;
         if (activeStyleEl) {
           activeStyleEl.innerHTML = cssCode;
         }
 
-        // 2. Build the self-updating DataviewJS code block
         const wrappedContent = [
           "```dataviewjs",
           "// --- CSS ---",
@@ -1129,6 +1238,13 @@ saveBtn.onclick = async () => {
           '}',
           `styleEl.innerHTML = \`${cssCode}\`;`,
           '',
+          "// --- CLEANUP REGISTRY ---",
+          'if (window.__cds_cleanups && window.__cds_cleanups[styleId]) {',
+          '  window.__cds_cleanups[styleId].forEach(fn => { try { fn(); } catch(e) {} });',
+          '}',
+          'window.__cds_cleanups = window.__cds_cleanups || {};',
+          'window.__cds_cleanups[styleId] = [];',
+          '',
           "// --- HTML ---",
           `const htmlContent = \`${htmlCode}\`;`,
           '',
@@ -1138,6 +1254,78 @@ saveBtn.onclick = async () => {
           'const $ = (s) => container.querySelector(s);',
           'const $$ = (s) => container.querySelectorAll(s);',
           'const db = {',
+          '  onCleanup: (fn) => { window.__cds_cleanups[styleId].push(fn); },',
+          '  loop: (fn) => {',
+          '    let rafId = null, running = false, lastTime = null;',
+          '    const frame = (time) => {',
+          '      if (!running) return;',
+          '      const delta = lastTime !== null ? (time - lastTime) : 0;',
+          '      lastTime = time;',
+          '      fn(delta, time);',
+          '      if (running) rafId = requestAnimationFrame(frame);',
+          '    };',
+          '    const ctrl = {',
+          '      start: () => { if (!running) { running = true; lastTime = null; rafId = requestAnimationFrame(frame); } return ctrl; },',
+          '      stop: () => { running = false; if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; } return ctrl; },',
+          '      toggle: () => { if (running) { ctrl.stop(); return false; } else { ctrl.start(); return true; } },',
+          '      get isRunning() { return running; }',
+          '    };',
+          '    window.__cds_cleanups[styleId].push(() => ctrl.stop());',
+          '    return ctrl;',
+          '  },',
+          '  canvas: (sel) => {',
+          '    const c = typeof sel === "string" ? container.querySelector(sel) : sel;',
+          '    if (!c || !c.getContext) return null;',
+          '    const ctx = c.getContext("2d");',
+          '    return {',
+          '      canvas: c, ctx,',
+          '      get width() { return c.width; }, set width(v) { c.width = v; },',
+          '      get height() { return c.height; }, set height(v) { c.height = v; },',
+          '      clear: (col) => { if (!ctx) return; if (col) { ctx.fillStyle = col; ctx.fillRect(0,0,c.width,c.height); } else { ctx.clearRect(0,0,c.width,c.height); } }',
+          '    };',
+          '  },',
+          '  onKey: (keys, fn, opts) => {',
+          '    const isFn = typeof keys === "function";',
+          '    const cb = isFn ? keys : fn;',
+          '    const list = isFn ? null : (Array.isArray(keys) ? keys.map(k => k.toLowerCase()) : [keys.toLowerCase()]);',
+          '    const h = (e) => { if (!list || list.includes(e.key.toLowerCase()) || list.includes(e.code.toLowerCase())) cb(e); };',
+          '    window.addEventListener("keydown", h, opts);',
+          '    const unbind = () => window.removeEventListener("keydown", h, opts);',
+          '    window.__cds_cleanups[styleId].push(unbind);',
+          '    return unbind;',
+          '  },',
+          '  beep: (freq = 440, dur = 0.1, type = "sine", vol = 0.1) => {',
+          '    try {',
+          '      const AC = window.AudioContext || window.webkitAudioContext;',
+          '      if (!AC) return;',
+          '      if (!window.__cds_audio_ctx || window.__cds_audio_ctx.state === "closed") window.__cds_audio_ctx = new AC();',
+          '      const aCtx = window.__cds_audio_ctx;',
+          '      if (aCtx.state === "suspended") aCtx.resume();',
+          '      const d = dur > 10 ? dur / 1000 : dur;',
+          '      const osc = aCtx.createOscillator();',
+          '      const gain = aCtx.createGain();',
+          '      osc.type = type; osc.frequency.setValueAtTime(freq, aCtx.currentTime);',
+          '      gain.gain.setValueAtTime(vol, aCtx.currentTime);',
+          '      gain.gain.exponentialRampToValueAtTime(0.0001, aCtx.currentTime + d);',
+          '      osc.connect(gain); gain.connect(aCtx.destination);',
+          '      osc.start(); osc.stop(aCtx.currentTime + d);',
+          '    } catch (e) {}',
+          '  },',
+          '  storage: (ns = "default") => {',
+          '    const p = `cds_${ns}_`;',
+          '    return {',
+          '      get: (k, def) => { try { const v = localStorage.getItem(p + k); return v === null ? def : JSON.parse(v); } catch(e) { return def; } },',
+          '      set: (k, v) => { try { localStorage.setItem(p + k, JSON.stringify(v)); } catch(e) {} },',
+          '      remove: (k) => { try { localStorage.removeItem(p + k); } catch(e) {} },',
+          '      clear: () => {',
+          '        try {',
+          '          const rem = [];',
+          '          for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(p)) rem.push(k); }',
+          '          rem.forEach(k => localStorage.removeItem(k));',
+          '        } catch(e) {}',
+          '      }',
+          '    };',
+          '  },',
           '  query: (src, def = []) => {',
           '    try {',
           '      const p = (dv && dv.pages) ? dv.pages(src) : null;',
