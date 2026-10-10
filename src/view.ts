@@ -743,25 +743,40 @@ export class StudioView extends ItemView {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
 
-/* Gutter in deeper desaturated blue */
+/* Compact Gutter that hugs the line numbers naturally */
 .cds-gutter { 
-  width: 44px; 
+  min-width: 28px !important;
+  width: auto !important;
   height: 100%; 
   flex-shrink: 0; 
-  background: #151a24 !important;             /* Deeper desaturated blue */
+  background: #151a24 !important; 
   border-right: 1px solid #283144 !important; 
-  color: #64748b !important;                  /* Muted slate blue line numbers */
+  color: #64748b !important; 
   font-family: var(--font-monospace) !important; 
-  font-size: 13px !important; 
+  font-size: 12px !important; 
   line-height: 20px !important; 
-  padding: 8px 0 !important; 
+  padding: 8px 6px !important; 
+  margin: 0 !important;
   overflow: hidden; 
   user-select: none; 
-  text-align: right; 
   box-sizing: border-box; 
 }
-.cds-gutter-line { padding-right: 8px; height: 20px; line-height: 20px; font-size: 12px; box-sizing: border-box; }
-.cds-gutter-line.has-error { color: #ff6b6b !important; font-weight: 700; background: rgba(255, 80, 80, 0.25) !important; }
+
+.cds-gutter-line { 
+  margin: 0 !important;
+  padding: 0 2px !important; 
+  height: 20px !important; 
+  line-height: 20px !important; 
+  font-size: 12px !important; 
+  text-align: right !important;
+  box-sizing: border-box !important; 
+}
+.cds-gutter-line.has-error { 
+  color: #ff6b6b !important; 
+  font-weight: 700; 
+  background: rgba(255, 80, 80, 0.25) !important; 
+  border-radius: 2px;
+}
 
 /* Code Display Box */
 .cds-code-box { position: relative; flex: 1; height: 100%; width: 100%; overflow: hidden; background: #1b2230 !important; }
