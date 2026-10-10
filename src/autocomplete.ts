@@ -9,10 +9,6 @@ export interface AutocompleteSuggestion {
   score?: number;
 }
 
-/**
- * Frequency weights for popular keywords & universal API tokens.
- * Higher weight means it will rank higher even if shorter words match.
- */
 const TOKEN_WEIGHTS: Record<string, number> = {
   // JavaScript Top Keywords
   'const': 95,
@@ -77,9 +73,6 @@ export class AutocompleteEngine {
     this.app = app;
   }
 
-  /**
-   * Introspects Vault, Theme, DOM, and Dataview API
-   */
   async indexVault() {
     // 1. Dynamic HTML Tags
     const htmlSet = new Set<string>();
@@ -155,9 +148,6 @@ export class AutocompleteEngine {
     this.dynamicFrontmatterKeys = Array.from(keySet);
   }
 
-  /**
-   * Checks whether the current cursor position is inside a comment
-   */
   isInsideComment(textBefore: string, mode: 'html' | 'css' | 'js'): boolean {
     if (mode === 'html') {
       const lastCommentOpen = textBefore.lastIndexOf('<!--');
@@ -172,11 +162,9 @@ export class AutocompleteEngine {
     }
 
     if (mode === 'js') {
-      // Check single-line comment on the current line
       const currentLine = textBefore.substring(textBefore.lastIndexOf('\n') + 1);
       if (/\/\/.*$/.test(currentLine)) return true;
 
-      // Check multi-line comment /* ... */
       const lastCommentOpen = textBefore.lastIndexOf('/*');
       const lastCommentClose = textBefore.lastIndexOf('*/');
       return lastCommentOpen > lastCommentClose;
@@ -185,37 +173,37 @@ export class AutocompleteEngine {
     return false;
   }
 
-  /**
-   * Scans active code buffer for user-declared tokens
-   */
-  getBufferTokens(content: string): string[] {
+  getBufferTokens(content: string, excludeWord: string): string[] {
     const matches = content.match(/\b[a-zA-Z_$][a-zA-Z0-9_$]{1,}\b/g);
-    return matches ? Array.from(new Set(matches)) : [];
+    if (!matches) return [];
+    const lowerExclude = excludeWord.toLowerCase();
+    const unique = new Set<string>();
+    for (const w of matches) {
+      if (w.toLowerCase() !== lowerExclude) {
+        unique.add(w);
+      }
+    }
+    return Array.from(unique);
   }
 
-  /**
-   * Intelligent relevance scoring with frequency weight integration
-   */
   scoreSuggestion(target: string, query: string, type: string): number {
     const text = target.toLowerCase();
     const q = query.toLowerCase();
 
+    // NEVER suggest the exact word currently being typed
+    if (text === q) return 0;
     if (!q || !text.includes(q)) return 0;
 
-    // Weight boost from dictionary
     const cleanWord = text.replace(/[^a-zA-Z0-9_.]/g, '');
     const weightBoost = TOKEN_WEIGHTS[cleanWord] || TOKEN_WEIGHTS[text] || 0;
 
-    // Exact match
-    if (text === q) return 1000 + weightBoost;
-
     let score = 0;
 
-    // 1. Prefix match (Highest base score)
+    // 1. Prefix match
     if (text.startsWith(q)) {
       score = 600 + weightBoost - (text.length - q.length) * 2;
     }
-    // 2. Word boundary match ('flex-direction' matching 'dir', 'db.query' matching 'query')
+    // 2. Word boundary match ('db.query' matching 'query')
     else if (new RegExp(`[\\-_.:]${q}`, 'i').test(text)) {
       score = 400 + weightBoost - text.length;
     }
@@ -229,19 +217,31 @@ export class AutocompleteEngine {
   }
 
   /**
-   * Generates context-aware, ranked suggestions
+   * Helper that deduplicates suggestions and eliminates exact matches
    */
+  private cleanSuggestions(list: AutocompleteSuggestion[], activeWord: string): AutocompleteSuggestion[] {
+    const seen = new Set<string>();
+    const out: AutocompleteSuggestion[] = [];
+    const lowerActive = activeWord.toLowerCase();
+
+    for (const item of list) {
+      const key = (item.displayText || item.text).toLowerCase().replace(/[();"']/g, '');
+      // Skip if already in list OR if it equals the word being typed
+      if (seen.has(key) || key === lowerActive) continue;
+      seen.add(key);
+      out.push(item);
+    }
+    return out;
+  }
+
   getSuggestions(
     textBefore: string, 
     fullBuffer: string, 
     mode: 'html' | 'css' | 'js'
   ): { suggestions: AutocompleteSuggestion[], startOffset: number } {
-    // 1. Check if inside comments -> Return nothing
     if (this.isInsideComment(textBefore, mode)) {
       return { suggestions: [], startOffset: 0 };
     }
-
-    const bufferWords = this.getBufferTokens(fullBuffer);
 
     // --- HTML Context ---
     if (mode === 'html') {
@@ -250,7 +250,10 @@ export class AutocompleteEngine {
         const query = tagMatch[1] ?? '';
         return {
           startOffset: query.length,
-          suggestions: this.dynamicHtmlTags.map(t => ({ text: t, type: 'html' }))
+          suggestions: this.cleanSuggestions(
+            this.dynamicHtmlTags.map(t => ({ text: t, type: 'html' })), 
+            query
+          )
         };
       }
 
@@ -259,7 +262,10 @@ export class AutocompleteEngine {
         const query = attrMatch[1] ?? '';
         return {
           startOffset: query.length,
-          suggestions: this.dynamicHtmlAttributes.map(a => ({ text: `${a}=""`, displayText: a, type: 'attr' }))
+          suggestions: this.cleanSuggestions(
+            this.dynamicHtmlAttributes.map(a => ({ text: `${a}=""`, displayText: a, type: 'attr' })), 
+            query
+          )
         };
       }
     }
@@ -271,7 +277,10 @@ export class AutocompleteEngine {
         const query = varMatch[1] ?? '';
         return {
           startOffset: query.length,
-          suggestions: this.dynamicCssVariables.map(v => ({ text: `${v})`, displayText: v, type: 'css-var' }))
+          suggestions: this.cleanSuggestions(
+            this.dynamicCssVariables.map(v => ({ text: `${v})`, displayText: v, type: 'css-var' })), 
+            query
+          )
         };
       }
 
@@ -280,10 +289,10 @@ export class AutocompleteEngine {
         const query = propMatch[1] ?? '';
         return {
           startOffset: query.length,
-          suggestions: [
+          suggestions: this.cleanSuggestions([
             ...this.dynamicCssProperties.map(p => ({ text: `${p}: `, displayText: p, type: 'css-prop' as const })),
             ...this.dynamicCssVariables.map(v => ({ text: `var(${v});`, displayText: v, type: 'css-var' as const }))
-          ]
+          ], query)
         };
       }
     }
@@ -296,10 +305,10 @@ export class AutocompleteEngine {
         const query = match?.[1]?.replace(/["']/g, '') ?? '';
         return {
           startOffset: query.length,
-          suggestions: [
+          suggestions: this.cleanSuggestions([
             ...this.dynamicVaultFolders.map(f => ({ text: `${f})`, displayText: f, type: 'vault' as const })),
             ...this.dynamicVaultTags.map(t => ({ text: `${t})`, displayText: t, type: 'vault' as const }))
-          ]
+          ], query)
         };
       }
 
@@ -342,6 +351,8 @@ export class AutocompleteEngine {
       const tokenMatch = textBefore.match(/([a-zA-Z0-9_$]+)$/);
       if (tokenMatch) {
         const query = tokenMatch[1] ?? '';
+        const bufferWords = this.getBufferTokens(fullBuffer, query);
+
         const jsKeywords = [
           'const', 'let', 'function', 'return', 'if', 'else', 'for', 'while',
           'async', 'await', 'import', 'export', 'new', 'class', 'try', 'catch',
@@ -351,12 +362,12 @@ export class AutocompleteEngine {
 
         return {
           startOffset: query.length,
-          suggestions: [
+          suggestions: this.cleanSuggestions([
             ...jsKeywords.map(k => ({ text: k, type: 'kw' as const })),
             ...this.dynamicDataviewApi.map(d => ({ text: d, type: 'dv' as const })),
             ...this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const })),
             ...bufferWords.map(w => ({ text: w, type: 'buffer' as const }))
-          ]
+          ], query)
         };
       }
     }
