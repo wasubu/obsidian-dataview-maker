@@ -44,6 +44,112 @@ export class StudioView extends ItemView {
     return "Database Studio"; 
   }
 
+  /**
+   * Generates the reusable client-side helper runtime for DataviewJS
+   */
+  getRuntimeHelpers(containerEl: HTMLElement, htmlContent: string) {
+    const app = this.app;
+    
+    // Auto-inject HTML
+    containerEl.innerHTML = htmlContent;
+
+    const $ = (sel: string) => containerEl.querySelector(sel);
+    const $$ = (sel: string) => containerEl.querySelectorAll(sel);
+
+    const db = {
+      // 1. Safe Vault query with mock data fallback
+      query: (source: string, fallback: any[] = []) => {
+        try {
+          const dv = (app as any).plugins?.plugins?.dataview?.api;
+          if (dv && dv.pages) {
+            const res = dv.pages(source).map((p: any) => ({
+              ...p,
+              path: p.file?.path || "#",
+              name: p.file?.name || ""
+            })).values;
+            if (res && res.length > 0) return res;
+          }
+        } catch (e) {}
+        return fallback;
+      },
+
+      // 2. Safe link open
+      openNote: (path: string) => {
+        if (!path || path === '#') {
+          new Notice("Preview mode link clicked");
+          return;
+        }
+        app.workspace.openLinkText(path, "", false);
+      },
+
+      // 3. Create Note with auto-increment, folder creation & YAML frontmatter
+      createNote: async (opts: { folder?: string; title?: string; frontmatter?: Record<string, any>; open?: boolean }): Promise<TFile | null> => {
+        const folder = opts.folder || "";
+        const baseTitle = opts.title || "Untitled";
+        try {
+          if (folder && !app.vault.getAbstractFileByPath(folder)) {
+            await app.vault.createFolder(folder);
+          }
+          let filePath = folder ? `${folder}/${baseTitle}.md` : `${baseTitle}.md`;
+          let counter = 1;
+          while (app.vault.getAbstractFileByPath(filePath)) {
+            filePath = folder ? `${folder}/${baseTitle} ${counter}.md` : `${baseTitle} ${counter}.md`;
+            counter++;
+          }
+
+          let yaml = "";
+          if (opts.frontmatter) {
+            yaml = "---\n" + Object.entries(opts.frontmatter).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n") + "\n---\n\n";
+          }
+          const file = await app.vault.create(filePath, `${yaml}# ${baseTitle}\n\n`);
+          if (opts.open !== false) {
+            await app.workspace.getLeaf().openFile(file);
+          }
+          new Notice(`Created note: ${filePath}`);
+          return file;
+        } catch (err: any) {
+          new Notice(`Failed to create note: ${err.message}`);
+          return null;
+        }
+      },
+
+      // 4. Render lists with empty states
+      renderList: (selector: string, items: any[], templateFn: (item: any) => string, emptyHtml = "<div>No items found</div>") => {
+        const target = containerEl.querySelector(selector);
+        if (!target) return;
+        if (!items || items.length === 0) {
+          target.innerHTML = emptyHtml;
+          return;
+        }
+        target.innerHTML = items.map(templateFn).join("");
+      },
+
+      // 5. Declarative filter bar
+      bindFilter: (selector: string, categories: string[], onSelect: (category: string) => void) => {
+        const bar = containerEl.querySelector(selector);
+        if (!bar) return;
+        bar.innerHTML = "";
+        let active = categories[0] || "All";
+
+        categories.forEach(cat => {
+          const btn = document.createElement("button");
+          btn.className = `filter-btn ${cat === active ? "active" : ""}`;
+          btn.innerText = cat;
+          btn.onclick = () => {
+            active = cat;
+            bar.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            onSelect(cat);
+          };
+          bar.appendChild(btn);
+        });
+        onSelect(active);
+      }
+    };
+
+    return { db, $, $$ };
+  }
+
   async loadVaultIntelligence() {
     // 1. Dynamic HTML tags
     const htmlSet = new Set<string>();
@@ -963,12 +1069,16 @@ textarea.cds-textarea-layer::selection {
 
       try {
         const dvApi = (this.app as any).plugins?.plugins?.dataview?.api;
-        const executeFn = new Function('container', 'htmlContent', 'app', 'notice', 'dv', jsCode);
-        executeFn(bodyDiv, htmlCode, this.app, (msg: string) => new Notice(msg), dvApi);
+        const { db, $, $$ } = this.getRuntimeHelpers(bodyDiv, htmlCode);
+
+        // Expose db to window so onclick="db.openNote(...)" works inside HTML attributes
+        (window as any).db = db;
+
+        const executeFn = new Function('container', 'htmlContent', 'app', 'notice', 'dv', 'db', '$', '$$', jsCode);
+        executeFn(bodyDiv, htmlCode, this.app, (msg: string) => new Notice(msg), dvApi, db, $, $$);
       } catch (err: any) {
         const errDiv = document.createElement('div');
         errDiv.style.color = 'var(--text-error)';
-        errDiv.style.fontFamily = 'var(--font-monospace)';
         errDiv.innerText = `Runtime Error: ${err.message}`;
         shadow.appendChild(errDiv);
       }
