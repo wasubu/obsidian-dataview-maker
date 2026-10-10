@@ -180,48 +180,53 @@ export class StudioView extends ItemView {
     return Math.max(score, 1);
   }
 
-  /**
-   * Fast syntax color tokenizer
+/**
+   * Robust code highlighter that safely escapes all text
+   * and highlights keywords, properties, methods, strings, and tags.
    */
   highlightCode(code: string, mode: 'html' | 'css' | 'js'): string {
-    const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const escape = (str: string) => 
+      str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     if (mode === 'html') {
-      return code.replace(/(<!--[\s\S]*?-->)|(<\/?[a-zA-Z0-9-]+)|([\w:-]+)(=)("[^"]*"|'[^']*')|(>|\/>)/g, 
-        (_m, comment, tag, attr, eq, val, close) => {
-          if (comment) return `<span class="cds-tok-comment">${escapeHtml(comment)}</span>`;
-          if (tag) return `<span class="cds-tok-tag">${escapeHtml(tag)}</span>`;
-          if (attr) return `<span class="cds-tok-attr">${escapeHtml(attr)}</span>${eq}<span class="cds-tok-str">${escapeHtml(val || '')}</span>`;
-          if (close) return `<span class="cds-tok-tag">${escapeHtml(close)}</span>`;
-          return escapeHtml(_m);
+      return code.replace(/(<!--[\s\S]*?-->)|(<\/?[a-zA-Z0-9-]+)|([\w:-]+)(=)("[^"]*"|'[^']*')|(>|\/>)|([^<]+)/g, 
+        (_m, comment, tag, attr, eq, val, close, text) => {
+          if (comment) return `<span class="cds-tok-comment">${escape(comment)}</span>`;
+          if (tag) return `<span class="cds-tok-tag">${escape(tag)}</span>`;
+          if (attr) return `<span class="cds-tok-attr">${escape(attr)}</span>${eq}<span class="cds-tok-str">${escape(val || '')}</span>`;
+          if (close) return `<span class="cds-tok-tag">${escape(close)}</span>`;
+          if (text) return escape(text);
+          return escape(_m);
         }
       );
     }
 
     if (mode === 'css') {
-      return code.replace(/(\/\*[\s\S]*?\*\/)|([.#][\w-]+)|([a-zA-Z-]+)\s*(:)|("[^"]*"|'[^']*')|([0-9.]+(?:px|rem|em|%|vh|vw|s|ms)?)|(var\(--[\w-]+\))/g,
-        (_m, comment, selector, prop, colon, str, num, cssVar) => {
-          if (comment) return `<span class="cds-tok-comment">${escapeHtml(comment)}</span>`;
-          if (selector) return `<span class="cds-tok-tag">${escapeHtml(selector)}</span>`;
-          if (prop) return `<span class="cds-tok-prop">${escapeHtml(prop)}</span>${colon}`;
-          if (str) return `<span class="cds-tok-str">${escapeHtml(str)}</span>`;
-          if (num) return `<span class="cds-tok-num">${escapeHtml(num)}</span>`;
-          if (cssVar) return `<span class="cds-tok-var">${escapeHtml(cssVar)}</span>`;
-          return escapeHtml(_m);
+      return code.replace(/(\/\*[\s\S]*?\*\/)|([.#][\w-]+)|([a-zA-Z-]+)\s*(:)|("[^"]*"|'[^']*')|([0-9.]+(?:px|rem|em|%|vh|vw|s|ms)?)|(var\(--[\w-]+\))|(\b(?:rgba?|hsla?|calc|minmax|repeat|url)\b)/g,
+        (_m, comment, selector, prop, colon, str, num, cssVar, fn) => {
+          if (comment) return `<span class="cds-tok-comment">${escape(comment)}</span>`;
+          if (selector) return `<span class="cds-tok-tag">${escape(selector)}</span>`;
+          if (prop) return `<span class="cds-tok-prop">${escape(prop)}</span>${colon}`;
+          if (str) return `<span class="cds-tok-str">${escape(str)}</span>`;
+          if (num) return `<span class="cds-tok-num">${escape(num)}</span>`;
+          if (cssVar) return `<span class="cds-tok-var">${escape(cssVar)}</span>`;
+          if (fn) return `<span class="cds-tok-builtin">${escape(fn)}</span>`;
+          return escape(_m);
         }
       );
     }
 
     // JS mode
-    return code.replace(/(\/\/.*|\/\*[\s\S]*?\*\/)|("[^"]*"|'[^']*'|`[\s\S]*?`)|(\b(?:const|let|var|function|return|if|else|for|while|import|export|class|new|async|await|try|catch|switch|case|break)\b)|(\b(?:true|false|null|undefined)\b)|(\b(?:dv|app|container|window|document)\b)|(\b\d+\b)/g,
-      (_m, comment, str, kw, bool, builtin, num) => {
-        if (comment) return `<span class="cds-tok-comment">${escapeHtml(comment)}</span>`;
-        if (str) return `<span class="cds-tok-str">${escapeHtml(str)}</span>`;
-        if (kw) return `<span class="cds-tok-kw">${escapeHtml(kw)}</span>`;
-        if (bool) return `<span class="cds-tok-bool">${escapeHtml(bool)}</span>`;
-        if (builtin) return `<span class="cds-tok-builtin">${escapeHtml(builtin)}</span>`;
-        if (num) return `<span class="cds-tok-num">${escapeHtml(num)}</span>`;
-        return escapeHtml(_m);
+    return code.replace(/(\/\/.*|\/\*[\s\S]*?\*\/)|("[^"]*"|'[^']*'|`[\s\S]*?`)|(\b(?:const|let|var|function|return|if|else|for|while|import|export|class|new|async|await|try|catch|switch|case|break)\b)|(\b(?:true|false|null|undefined)\b)|(\b(?:dv|app|container|window|document|console)\b)|(\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)(?=\s*\()|(\b\d+\b)/g,
+      (_m, comment, str, kw, bool, builtin, method, num) => {
+        if (comment) return `<span class="cds-tok-comment">${escape(comment)}</span>`;
+        if (str) return `<span class="cds-tok-str">${escape(str)}</span>`;
+        if (kw) return `<span class="cds-tok-kw">${escape(kw)}</span>`;
+        if (bool) return `<span class="cds-tok-bool">${escape(bool)}</span>`;
+        if (builtin) return `<span class="cds-tok-builtin">${escape(builtin)}</span>`;
+        if (method) return `<span class="cds-tok-prop">${escape(method)}</span>`;
+        if (num) return `<span class="cds-tok-num">${escape(num)}</span>`;
+        return escape(_m);
       }
     );
   }
@@ -779,7 +784,15 @@ export class StudioView extends ItemView {
 }
 
 /* Code Display Box */
-.cds-code-box { position: relative; flex: 1; height: 100%; width: 100%; overflow: hidden; background: #1b2230 !important; }
+.cds-code-box { 
+  position: relative; 
+  flex: 1; 
+  height: 100%; 
+  width: 100%; 
+  overflow: hidden; 
+  background: #1b2230 !important; 
+  color: #e2e8f0 !important; /* Base text color for everything */
+}
 
 /* Pre Layer Resets */
 pre.cds-highlight-layer {
@@ -802,6 +815,7 @@ pre.cds-highlight-layer {
   border: none !important;
   z-index: 1 !important;
   tab-size: 2 !important;
+  color: #e2e8f0 !important; /* Guarantees non-token text is bright off-white */
 }
 
 pre.cds-highlight-layer code {
@@ -815,7 +829,7 @@ pre.cds-highlight-layer code {
   padding: 0 !important;
   margin: 0 !important;
   display: inline !important;
-  color: #cbd5e1;                              /* Crisp light-slate text color */
+  color: #e2e8f0 !important; /* Guarantees plain text like 'Add Book' is visible */
 }
 
 /* Typing Layer */
