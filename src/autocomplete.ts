@@ -4,7 +4,7 @@ import { App, TFolder } from 'obsidian';
 export interface AutocompleteSuggestion {
   text: string;
   displayText?: string;
-  type: 'kw' | 'api' | 'builtin' | 'html' | 'attr' | 'css-prop' | 'css-val' | 'css-var' | 'dv' | 'vault' | 'prop' | 'buffer';
+  type: 'kw' | 'api' | 'builtin' | 'var' | 'fn' | 'html' | 'attr' | 'html-class' | 'html-id' | 'css-prop' | 'css-val' | 'css-var' | 'dv' | 'vault' | 'prop' | 'buffer';
   weight?: number;
   score?: number;
 }
@@ -104,13 +104,62 @@ export class AutocompleteEngine {
     this.dynamicFrontmatterKeys = Array.from(keySet);
   }
 
+  /**
+   * Extracts classes and IDs defined in the HTML markup
+   */
+  extractHtmlTokens(html: string): { classes: string[], ids: string[] } {
+    const classes = new Set<string>();
+    const ids = new Set<string>();
+
+    const classMatches = html.matchAll(/class=["']([^"']+)["']/g);
+    for (const m of classMatches) {
+      if (m[1]) m[1].split(/\s+/).forEach(c => { if (c.trim()) classes.add(c.trim()); });
+    }
+
+    const idMatches = html.matchAll(/id=["']([^"']+)["']/g);
+    for (const m of idMatches) {
+      if (m[1] && m[1].trim()) ids.add(m[1].trim());
+    }
+
+    return { classes: Array.from(classes), ids: Array.from(ids) };
+  }
+
+  /**
+   * Extracts user declared variables, constants, and functions from JS code
+   */
+  extractUserJsSymbols(jsCode: string): { vars: string[], fns: string[] } {
+    const vars = new Set<string>();
+    const fns = new Set<string>();
+
+    // const X, let X, var X
+    const declMatches = jsCode.matchAll(/\b(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g);
+    for (const m of declMatches) if (m[1]) vars.add(m[1]);
+
+    // function myFunc()
+    const fnMatches = jsCode.matchAll(/\bfunction\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g);
+    for (const m of fnMatches) if (m[1]) fns.add(m[1]);
+
+    // (param1, param2) =>
+    const paramMatches = jsCode.matchAll(/\(([a-zA-Z_$,\s]+)\)\s*=>/g);
+    for (const m of paramMatches) {
+      if (m[1]) {
+        m[1].split(',').forEach(p => {
+          const clean = p.trim();
+          if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(clean)) vars.add(clean);
+        });
+      }
+    }
+
+    // for (let item of items)
+    const forMatches = jsCode.matchAll(/\bfor\s*\(\s*(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s+(?:of|in)\b/g);
+    for (const m of forMatches) if (m[1]) vars.add(m[1]);
+
+    return { vars: Array.from(vars), fns: Array.from(fns) };
+  }
+
   isInsideComment(textBefore: string, mode: 'html' | 'css' | 'js'): boolean {
-    if (mode === 'html') {
-      return textBefore.lastIndexOf('<!--') > textBefore.lastIndexOf('-->');
-    }
-    if (mode === 'css') {
-      return textBefore.lastIndexOf('/*') > textBefore.lastIndexOf('*/');
-    }
+    if (mode === 'html') return textBefore.lastIndexOf('<!--') > textBefore.lastIndexOf('-->');
+    if (mode === 'css') return textBefore.lastIndexOf('/*') > textBefore.lastIndexOf('*/');
     if (mode === 'js') {
       const currentLine = textBefore.substring(textBefore.lastIndexOf('\n') + 1);
       if (/\/\/.*$/.test(currentLine)) return true;
@@ -144,7 +193,12 @@ export class AutocompleteEngine {
     if (!q || !text.includes(q)) return 0;
 
     const cleanWord = text.replace(/[^a-zA-Z0-9_.]/g, '');
-    const weightBoost = TOKEN_WEIGHTS[cleanWord] || TOKEN_WEIGHTS[text] || 0;
+    let weightBoost = TOKEN_WEIGHTS[cleanWord] || TOKEN_WEIGHTS[text] || 0;
+
+    // High relevance boost for user variables, functions, and HTML classes/IDs
+    if (type === 'var' || type === 'fn' || type === 'html-class' || type === 'html-id') {
+      weightBoost = Math.max(weightBoost, 90);
+    }
 
     let score = 0;
     if (text.startsWith(q)) {
@@ -168,7 +222,7 @@ export class AutocompleteEngine {
       if (seen.has(key) || (lowerActive && key === lowerActive)) continue;
       seen.add(key);
 
-      const weight = TOKEN_WEIGHTS[key] || TOKEN_WEIGHTS[item.text] || 0;
+      const weight = item.weight || TOKEN_WEIGHTS[key] || TOKEN_WEIGHTS[item.text] || 0;
       out.push({ ...item, weight });
     }
 
@@ -181,11 +235,14 @@ export class AutocompleteEngine {
   getSuggestions(
     textBefore: string, 
     fullBuffer: string, 
-    mode: 'html' | 'css' | 'js'
+    mode: 'html' | 'css' | 'js',
+    htmlCode = ''
   ): { suggestions: AutocompleteSuggestion[], startOffset: number } {
     if (this.isInsideComment(textBefore, mode)) {
       return { suggestions: [], startOffset: 0 };
     }
+
+    const { classes: htmlClasses, ids: htmlIds } = this.extractHtmlTokens(htmlCode);
 
     // =========================================================================
     // HTML Context
@@ -195,21 +252,13 @@ export class AutocompleteEngine {
       const lastCloseTag = textBefore.lastIndexOf('>');
       const isInsideTag = lastOpenTag > lastCloseTag;
 
-      // 1. Outside tags (<p>Hello friend|</p>) -> ZERO suggestions
-      if (!isInsideTag) {
-        return { suggestions: [], startOffset: 0 };
-      }
+      if (!isInsideTag) return { suggestions: [], startOffset: 0 };
 
       const tagContent = textBefore.substring(lastOpenTag);
-
-      // 2. Inside attribute quotes (<div class="|">) -> ZERO suggestions
       const inDoubleQuotes = (tagContent.match(/"/g) || []).length % 2 === 1;
       const inSingleQuotes = (tagContent.match(/'/g) || []).length % 2 === 1;
-      if (inDoubleQuotes || inSingleQuotes) {
-        return { suggestions: [], startOffset: 0 };
-      }
+      if (inDoubleQuotes || inSingleQuotes) return { suggestions: [], startOffset: 0 };
 
-      // 3. Tag name autocompletion (<di|)
       const tagMatch = tagContent.match(/^<([a-zA-Z0-9-]*)$/);
       if (tagMatch) {
         const query = tagMatch[1] ?? '';
@@ -217,13 +266,11 @@ export class AutocompleteEngine {
           startOffset: query.length,
           suggestions: this.cleanSuggestions(
             this.dynamicHtmlTags.map(t => {
-              // Self-closing vs paired tags
               if (VOID_TAGS.has(t)) {
                 if (t === 'img') return { text: 'img src="" alt="">', displayText: 'img', type: 'html' };
                 if (t === 'input') return { text: 'input type="text">', displayText: 'input', type: 'html' };
                 return { text: `${t}>`, displayText: t, type: 'html' };
               }
-              // Normal tags auto-close to <div></div>
               return { text: `${t}></${t}>`, displayText: t, type: 'html' };
             }), 
             query
@@ -231,7 +278,6 @@ export class AutocompleteEngine {
         };
       }
 
-      // 4. Attribute autocompletion (<div cl|)
       const attrMatch = tagContent.match(/\s+([a-zA-Z0-9-]*)$/);
       if (attrMatch) {
         const query = attrMatch[1] ?? '';
@@ -261,13 +307,41 @@ export class AutocompleteEngine {
       const lastCloseBrace = textBefore.lastIndexOf('}');
       const isInsideRule = lastOpenBrace > lastCloseBrace;
 
-      // 1. Outside { } -> Selector context (no properties)
-      if (!isInsideRule) return { suggestions: [], startOffset: 0 };
+      // 1. SELECTOR SCOPE (Outside { }): Suggest HTML Classes & IDs
+      if (!isInsideRule) {
+        // Typing dot (.) in selector: suggest HTML classes
+        const classMatch = textBefore.match(/\.([a-zA-Z0-9_-]*)$/);
+        if (classMatch) {
+          const query = classMatch[1] ?? '';
+          return {
+            startOffset: query.length,
+            suggestions: this.cleanSuggestions(
+              htmlClasses.map(c => ({ text: c, displayText: `.${c}`, type: 'html-class', weight: 100 })),
+              query
+            )
+          };
+        }
 
+        // Typing hash (#) in selector: suggest HTML IDs
+        const idMatch = textBefore.match(/#([a-zA-Z0-9_-]*)$/);
+        if (idMatch) {
+          const query = idMatch[1] ?? '';
+          return {
+            startOffset: query.length,
+            suggestions: this.cleanSuggestions(
+              htmlIds.map(i => ({ text: i, displayText: `#${i}`, type: 'html-id', weight: 100 })),
+              query
+            )
+          };
+        }
+
+        return { suggestions: [], startOffset: 0 };
+      }
+
+      // 2. PROPERTY / VALUE SCOPE (Inside { })
       const ruleContent = textBefore.substring(lastOpenBrace);
       const isValueScope = ruleContent.lastIndexOf(':') > ruleContent.lastIndexOf(';');
 
-      // 2. Value Scope (display: fl|) -> Suggest values
       if (isValueScope) {
         const valMatch = textBefore.match(/:\s*([a-zA-Z0-9-]*)$/);
         const query = valMatch ? (valMatch[1] ?? '') : '';
@@ -281,7 +355,6 @@ export class AutocompleteEngine {
         };
       }
 
-      // 3. Property Scope (dis|) -> Suggest properties
       const propMatch = textBefore.match(/([a-zA-Z-]*)$/);
       if (propMatch) {
         const query = propMatch[1] ?? '';
@@ -299,6 +372,40 @@ export class AutocompleteEngine {
     // JavaScript Context
     // =========================================================================
     if (mode === 'js') {
+      // 1. Selector strings in $(), $$(), querySelector() -> Suggest HTML IDs and Classes!
+      const selectorMatch = textBefore.match(/(?:\$|\$\$|querySelector|querySelectorAll)\(\s*['"]([#.]?[a-zA-Z0-9_-]*)$/);
+      if (selectorMatch) {
+        const rawQuery = selectorMatch[1] ?? '';
+        
+        // If user typed # or nothing, suggest IDs
+        const idSuggestions = htmlIds.map(i => ({
+          text: rawQuery.startsWith('#') ? `${i}')` : `#${i}')`,
+          displayText: `#${i}`,
+          type: 'html-id' as const,
+          weight: 100
+        }));
+
+        // If user typed . or nothing, suggest Classes
+        const classSuggestions = htmlClasses.map(c => ({
+          text: rawQuery.startsWith('.') ? `${c}')` : `.${c}')`,
+          displayText: `.${c}`,
+          type: 'html-class' as const,
+          weight: 95
+        }));
+
+        const cleanQuery = rawQuery.replace(/^[#.]/, '');
+        return {
+          startOffset: cleanQuery.length,
+          suggestions: this.cleanSuggestions(
+            rawQuery.startsWith('.') ? classSuggestions : 
+            rawQuery.startsWith('#') ? idSuggestions : 
+            [...idSuggestions, ...classSuggestions],
+            cleanQuery
+          )
+        };
+      }
+
+      // 2. Vault Queries: dv.pages("...") or db.query("...")
       if (/(?:dv\.pages|db\.query)\([^)]*$/.test(textBefore)) {
         const match = textBefore.match(/(?:dv\.pages|db\.query)\(([^)]*)$/);
         const query = match?.[1]?.replace(/["']/g, '') ?? '';
@@ -313,7 +420,7 @@ export class AutocompleteEngine {
 
       if (this.isInsideString(textBefore)) return { suggestions: [], startOffset: 0 };
 
-      // Member Access after dot (.)
+      // 3. Member Access after dot (.)
       const dotMatch = textBefore.match(/([a-zA-Z0-9_$]+)\.([a-zA-Z0-9_$]*)$/);
       if (dotMatch) {
         const objName = dotMatch[1];
@@ -366,14 +473,21 @@ export class AutocompleteEngine {
         };
       }
 
-      // Top-Level Scope
+      // 4. TOP-LEVEL SCOPE: Keywords, User Variables & User Functions
       const tokenMatch = textBefore.match(/([a-zA-Z0-9_$]+)$/);
       if (tokenMatch) {
         const query = tokenMatch[1] ?? '';
+        const { vars: userVars, fns: userFns } = this.extractUserJsSymbols(fullBuffer);
+
         const jsTopLevel = ['const', 'let', 'function', 'return', 'if', 'else', 'for', 'while', 'async', 'await', 'new', 'class', 'console', 'db', 'dv', 'app', '$', '$$'];
+
         return {
           startOffset: query.length,
-          suggestions: this.cleanSuggestions(jsTopLevel.map(k => ({ text: k, type: 'kw' as const })), query)
+          suggestions: this.cleanSuggestions([
+            ...userVars.map(v => ({ text: v, type: 'var' as const, weight: 95 })),
+            ...userFns.map(f => ({ text: `${f}()`, displayText: f, type: 'fn' as const, weight: 95 })),
+            ...jsTopLevel.map(k => ({ text: k, type: 'kw' as const }))
+          ], query)
         };
       }
     }

@@ -284,7 +284,8 @@ export class StudioView extends ItemView {
     parent: HTMLElement,
     mode: 'html' | 'css' | 'js',
     initialCode: string,
-    onChange: (val: string) => void
+    onChange: (val: string) => void,
+    getHtmlCode?: () => string // <-- ADD THIS
   ) {
     const editorRoot = parent.createDiv({ cls: 'cds-editor-wrapper' });
     const gutter = editorRoot.createDiv({ cls: 'cds-gutter' });
@@ -439,8 +440,9 @@ const insertSuggestion = (item: AutocompleteSuggestion) => {
       const pos = textarea.selectionStart;
       const textBefore = textarea.value.substring(0, pos);
 
-      // 1. Get suggestions through dedicated engine
-      const { suggestions, startOffset } = this.autocompleteEngine.getSuggestions(textBefore, textarea.value, mode);
+      // Passes htmlCode into the engine so CSS and JS tabs know HTML classes and IDs in real time
+      const currentHtml = getHtmlCode ? getHtmlCode() : '';
+      const { suggestions, startOffset } = this.autocompleteEngine.getSuggestions(textBefore, textarea.value, mode, currentHtml);
 
       if (suggestions.length === 0) {
         hideDropdown();
@@ -754,9 +756,9 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       debounceTimer = setTimeout(() => runCode(), 250);
     };
 
-    const htmlEditor = this.createCodeEditor(htmlPane, 'html', htmlCode, (val) => { htmlCode = val; triggerHotReload(); });
-    const cssEditor = this.createCodeEditor(cssPane, 'css', cssCode, (val) => { cssCode = val; triggerHotReload(); });
-    const jsEditor = this.createCodeEditor(jsPane, 'js', jsCode, (val) => { jsCode = val; triggerHotReload(); });
+    const htmlEditor = this.createCodeEditor(htmlPane, 'html', htmlCode, (val) => { htmlCode = val; triggerHotReload(); }, () => htmlCode);
+    const cssEditor = this.createCodeEditor(cssPane, 'css', cssCode, (val) => { cssCode = val; triggerHotReload(); }, () => htmlCode);
+    const jsEditor = this.createCodeEditor(jsPane, 'js', jsCode, (val) => { jsCode = val; triggerHotReload(); }, () => htmlCode);
 
     const previewWrapper = container.createDiv({ cls: 'cds-preview-pane' });
     previewWrapper.createEl('h4', { text: 'Live Preview Output', attr: { style: 'margin-top:0; margin-bottom:8px; font-size:0.85rem; color:var(--text-muted);' } });
