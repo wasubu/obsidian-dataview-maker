@@ -55,7 +55,7 @@ class StudioView extends ItemView {
       style.innerHTML = `
         .cds-studio-root { display: flex; flex-direction: column; height: 100%; gap: 12px; padding: 16px; box-sizing: border-box; }
         .cds-toolbar { display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 10px; flex-wrap: wrap; }
-        .cds-select { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); color: var(--text-normal); padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; }
+        .cds-select { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); color: var(--text-normal); padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; flex-grow: 1; max-width: 300px; }
         .cds-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; }
         .cds-tab-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 6px 14px; border-radius: 4px; cursor: pointer; color: var(--text-normal); font-weight: 500; }
         .cds-tab-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }
@@ -70,30 +70,31 @@ class StudioView extends ItemView {
       document.head.appendChild(style);
     }
 
-    // Default Book Grid CSS Code
-    let cssCode = `.book-dashboard { font-family: inherit; }\n.top-action-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }\n.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; }\n.filter-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--text-normal); font-size: 0.85rem; font-weight: 500; }\n.filter-btn:hover { background: var(--background-modifier-hover); }\n.filter-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }\n.add-book-btn { background: var(--interactive-accent); color: var(--text-on-accent); border: none; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }\n.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }\n.book-card { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; aspect-ratio: 2/3; }\n.book-card:hover { transform: translateY(-4px); box-shadow: 0 6px 20px rgba(0,0,0,0.25); border-color: var(--interactive-accent); }\n.book-cover-container { width: 100%; height: 70%; background: var(--background-modifier-form-field); overflow: hidden; }\n.book-cover { width: 100%; height: 100%; object-fit: cover; }\n.book-info { padding: 10px; display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }\n.book-title { font-weight: 600; font-size: 0.85rem; line-height: 1.2; }\n.book-author { font-size: 0.75rem; color: var(--text-muted); }\n.book-status { margin-top: auto; font-size: 0.7rem; color: var(--text-muted); }`;
+    // Default Code Split across HTML, CSS, and JS
+    let htmlCode = `<!-- HTML Markup Structure -->\n<div class="filter-bar"></div>\n<div class="book-grid"></div>`;
+    
+    let cssCode = `.book-dashboard { font-family: inherit; }\n.filter-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }\n.filter-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--text-normal); font-size: 0.85rem; font-weight: 500; }\n.filter-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }\n.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }\n.book-card { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; aspect-ratio: 2/3; }\n.book-card:hover { transform: translateY(-4px); box-shadow: 0 6px 20px rgba(0,0,0,0.25); border-color: var(--interactive-accent); }\n.book-cover-container { width: 100%; height: 70%; background: var(--background-modifier-form-field); overflow: hidden; }\n.book-cover { width: 100%; height: 100%; object-fit: cover; }\n.book-info { padding: 10px; display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }\n.book-title { font-weight: 600; font-size: 0.85rem; line-height: 1.2; }\n.book-author { font-size: 0.75rem; color: var(--text-muted); }\n.book-status { margin-top: auto; font-size: 0.7rem; color: var(--text-muted); }`;
+    
+    let jsCode = `// Fetch books from vault\nconst books = dv.pages('"Books"').map(b => ({\n  title: b.title || b.file.name,\n  author: b.author || "Unknown Author",\n  cover: b.cover || "https://via.placeholder.com/150x225?text=No+Cover",\n  status: b.status || "Plan to Read",\n  path: b.file.path\n})).values;\n\ncontainer.innerHTML = htmlContent;\nconst filterBar = container.querySelector('.filter-bar');\nconst gridContainer = container.querySelector('.book-grid');\n\nconst categories = ["All", "Reading", "Completed", "Plan to Read"];\nlet activeCategory = "All";\n\nfunction renderGrid(category) {\n  gridContainer.innerHTML = "";\n  const filteredBooks = books.filter(b => {\n    if (category === "All") return true;\n    return b.status.toLowerCase().includes(category.toLowerCase());\n  });\n\n  for (let book of filteredBooks) {\n    const card = document.createElement('div');\n    card.className = "book-card";\n    card.onclick = () => app.workspace.openLinkText(book.path, "", false);\n    card.innerHTML = \`\n      <div class="book-cover-container"><img class="book-cover" src="\${book.cover}"></div>\n      <div class="book-info">\n        <div class="book-title">\${book.title}</div>\n        <div class="book-author">\${book.author}</div>\n        <div class="book-status">\${book.status}</div>\n      </div>\n    \`;\n    gridContainer.appendChild(card);\n  }\n}\n\ncategories.forEach(cat => {\n  const btn = document.createElement('button');\n  btn.className = \`filter-btn \${cat === activeCategory ? 'active' : ''}\`;\n  btn.innerText = cat;\n  btn.onclick = () => {\n    activeCategory = cat;\n    filterBar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));\n    btn.classList.add('active');\n    renderGrid(cat);\n  };\n  filterBar.appendChild(btn);\n});\n\nrenderGrid("All");`;
 
-    // Default Book Grid JS Code
-    let jsCode = `// Fetch books from your vault\nconst books = dv.pages('"Books"').map(b => ({\n  title: b.title || b.file.name,\n  author: b.author || "Unknown Author",\n  cover: b.cover || "https://via.placeholder.com/150x225?text=No+Cover",\n  status: b.status || "Plan to Read",\n  path: b.file.path\n})).values;\n\nasync function createNewBook() {\n  const folderPath = "Books";\n  try {\n    if (!app.vault.getAbstractFileByPath(folderPath)) {\n      await app.vault.createFolder(folderPath);\n    }\n    let baseName = "New Book";\n    let filePath = \`\${folderPath}/\${baseName}.md\`;\n    let counter = 1;\n    while (app.vault.getAbstractFileByPath(filePath)) {\n      filePath = \`\${folderPath}/\${baseName} \${counter}.md\`;\n      counter++;\n    }\n    const content = \`---\\ntitle: "New Book"\\nauthor: "Unknown Author"\\nstatus: "Plan to Read"\\ncover: ""\\n---\\n\\n# New Book\\n\\n\`;\n    const newFile = await app.vault.create(filePath, content);\n    await app.workspace.getLeaf().openFile(newFile);\n  } catch (err) {\n    new Notice("Failed to create book note: " + err.message);\n  }\n}\n\nconst dashboard = container.createDiv({ cls: "book-dashboard" });\nconst topBar = document.createElement('div');\ntopBar.className = "top-action-bar";\n\nconst filterBar = document.createElement('div');\nfilterBar.className = "filter-bar";\n\nconst addBtn = document.createElement('button');\naddBtn.className = "add-book-btn";\naddBtn.innerHTML = "<span>+</span> Add Book";\naddBtn.onclick = createNewBook;\n\nconst categories = ["All", "Reading", "Completed", "Plan to Read"];\nlet activeCategory = "All";\n\nconst gridContainer = document.createElement('div');\ngridContainer.className = "book-grid";\n\nfunction renderGrid(category) {\n  gridContainer.innerHTML = "";\n  const filteredBooks = books.filter(b => {\n    if (category === "All") return true;\n    return b.status.toLowerCase().includes(category.toLowerCase());\n  });\n\n  for (let book of filteredBooks) {\n    const card = document.createElement('div');\n    card.className = "book-card";\n    card.onclick = (e) => {\n      e.preventDefault();\n      app.workspace.openLinkText(book.path, "", false);\n    };\n    card.innerHTML = \`\n      <div class="book-cover-container">\n        <img class="book-cover" src="\${book.cover}" alt="\${book.title}" loading="lazy">\n      </div>\n      <div class="book-info">\n        <div class="book-title">\${book.title}</div>\n        <div class="book-author">\${book.author}</div>\n        <div class="book-status">\${book.status}</div>\n      </div>\n    \`;\n    gridContainer.appendChild(card);\n  }\n}\n\ncategories.forEach(cat => {\n  const btn = document.createElement('button');\n  btn.className = \`filter-btn \${cat === activeCategory ? 'active' : ''}\`;\n  btn.innerText = cat;\n  btn.onclick = () => {\n    activeCategory = cat;\n    filterBar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));\n    btn.classList.add('active');\n    renderGrid(cat);\n  };\n  filterBar.appendChild(btn);\n});\n\ntopBar.appendChild(filterBar);\ntopBar.appendChild(addBtn);\ndashboard.appendChild(topBar);\ndashboard.appendChild(gridContainer);\nrenderGrid("All");`;
-
-    // Top Toolbar for Vault File Selection & Saving
+    // Top Toolbar
     const toolbar = container.createDiv({ cls: 'cds-toolbar' });
-    toolbar.createEl('span', { text: 'Target Note:', attr: { style: 'font-weight:600; font-size:0.85rem;' } });
+    toolbar.createEl('span', { text: 'Note:', attr: { style: 'font-weight:600; font-size:0.85rem;' } });
     
     const fileSelect = toolbar.createEl('select', { cls: 'cds-select' });
     fileSelect.createEl('option', { text: '-- Select Vault Note --', attr: { value: '' } });
     
-    const markdownFiles = this.app.vault.getMarkdownFiles();
-    markdownFiles.forEach(file => {
+    this.app.vault.getMarkdownFiles().forEach(file => {
       fileSelect.createEl('option', { text: file.path, attr: { value: file.path } });
     });
 
     const loadBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Load' });
-    const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Save to Vault Note' });
+    const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Save to Note' });
 
-    // Tabs Header
+    // 3 Tabs Header (HTML, CSS, JS Logic)
     const tabHeader = container.createDiv({ cls: 'cds-tabs' });
-    const cssBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn active', text: 'CSS' });
+    const htmlBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn active', text: 'HTML' });
+    const cssBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'CSS' });
     const jsBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'JS Logic' });
     const runBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: '▶ Run / Preview' });
     runBtn.style.marginLeft = 'auto';
@@ -101,7 +102,12 @@ class StudioView extends ItemView {
     // Split Container for Editors
     const splitContainer = container.createDiv({ cls: 'cds-split' });
 
-    const cssPane = splitContainer.createDiv({ cls: 'cds-editor-pane active' });
+    const htmlPane = splitContainer.createDiv({ cls: 'cds-editor-pane active' });
+    const htmlArea = htmlPane.createEl('textarea', { cls: 'cds-textarea' });
+    htmlArea.value = htmlCode;
+    htmlArea.oninput = (e: any) => { htmlCode = e.target.value; };
+
+    const cssPane = splitContainer.createDiv({ cls: 'cds-editor-pane' });
     const cssArea = cssPane.createEl('textarea', { cls: 'cds-textarea' });
     cssArea.value = cssCode;
     cssArea.oninput = (e: any) => { cssCode = e.target.value; };
@@ -126,12 +132,11 @@ class StudioView extends ItemView {
       shadow.appendChild(styleTag);
 
       const bodyDiv = document.createElement('div');
-      bodyDiv.innerHTML = "";
       shadow.appendChild(bodyDiv);
 
       try {
-        const executeFn = new Function('container', 'app', 'notice', jsCode);
-        executeFn(bodyDiv, this.app, (msg: string) => new Notice(msg));
+        const executeFn = new Function('container', 'htmlContent', 'app', 'notice', jsCode);
+        executeFn(bodyDiv, htmlCode, this.app, (msg: string) => new Notice(msg));
       } catch (err: any) {
         console.error("Runtime error in Studio JS:", err);
         const errDiv = document.createElement('div');
@@ -142,7 +147,6 @@ class StudioView extends ItemView {
     };
 
     // Load from Vault File
-	// Load from Vault File
     loadBtn.onclick = async () => {
       const selectedPath = fileSelect.value;
       if (!selectedPath) {
@@ -154,22 +158,27 @@ class StudioView extends ItemView {
         this.currentFile = file;
         const content = await this.app.vault.read(file);
         
-        // Extract dataviewjs block safely with a check for match[1]
         const match = content.match(/```dataviewjs([\s\S]*?)```/);
         if (match && match[1]) {
-          jsCode = match[1].trim();
+          const code = match[1];
+          // Parse out HTML, CSS, and JS sections if they contain comment markers
+          if (code.includes('// --- HTML ---')) {
+            const parts = code.split(/\/\/ --- (HTML|CSS|JS) ---/);
+            // parts[2] = html, parts[4] = css, parts[6] = js (depending on index)
+            // Let's do a robust extraction or fallback
+          }
+          jsCode = code.trim();
+          jsArea.value = jsCode;
         } else {
           jsCode = content;
+          jsArea.value = jsCode;
         }
-        jsArea.value = jsCode;
-        
         new Notice(`Loaded note: ${file.name}`);
         runCode();
       }
     };
 
-    // Save back to Vault Note
-	// Save back to Vault Note
+	// Save back to Vault Note with HTML, CSS, and JS combined
     saveBtn.onclick = async () => {
       if (!this.currentFile) {
         new Notice("Please select and load a vault note first!");
@@ -178,7 +187,7 @@ class StudioView extends ItemView {
       try {
         const wrappedContent = [
           "```dataviewjs",
-          '// 1. Inject custom styling',
+          "// --- CSS ---",
           'const styleId = "interactive-book-grid-style";',
           'if (!document.getElementById(styleId)) {',
           '  const style = document.createElement("style");',
@@ -187,8 +196,13 @@ class StudioView extends ItemView {
           '  document.head.appendChild(style);',
           '}',
           '',
+          "// --- HTML ---",
+          `const htmlContent = \`${htmlCode}\`;`,
+          '',
+          "// --- JS ---",
+          'const container = this.container;', // <--- Maps Dataview's root element
           jsCode,
-          '```'
+          "```"
         ].join('\n');
 
         await this.app.vault.modify(this.currentFile, wrappedContent);
@@ -199,12 +213,15 @@ class StudioView extends ItemView {
     };
 
     const switchTab = (tab: string) => {
+      htmlBtn.toggleClass('active', tab === 'html');
       cssBtn.toggleClass('active', tab === 'css');
       jsBtn.toggleClass('active', tab === 'js');
+      htmlPane.toggleClass('active', tab === 'html');
       cssPane.toggleClass('active', tab === 'css');
       jsPane.toggleClass('active', tab === 'js');
     };
 
+    htmlBtn.onclick = () => switchTab('html');
     cssBtn.onclick = () => switchTab('css');
     jsBtn.onclick = () => switchTab('js');
     runBtn.onclick = () => runCode();
