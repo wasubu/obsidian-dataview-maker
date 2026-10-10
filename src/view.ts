@@ -412,7 +412,7 @@ export class StudioView extends ItemView {
       return coords;
     };
 
-    textarea.addEventListener('input', () => {
+    textarea.addEventListener('input', () => textarea.addEventListener('input', () => {
       renderGutterAndHighlight();
       onChange(textarea.value);
 
@@ -422,23 +422,34 @@ export class StudioView extends ItemView {
       // 1. Get suggestions through dedicated engine
       const { suggestions, startOffset } = this.autocompleteEngine.getSuggestions(textBefore, textarea.value, mode);
 
+      if (suggestions.length === 0) {
+        hideDropdown();
+        return;
+      }
+
       const activeWord = textBefore.substring(pos - startOffset).toLowerCase();
-      if (!activeWord || activeWord.length < 1) {
+
+      // Only close if there's no word AND no trigger context (like dot or tag)
+      if (startOffset > 0 && (!activeWord || activeWord.length < 1)) {
         hideDropdown();
         return;
       }
 
       replaceStartPos = pos - startOffset;
 
-      // 2. Score using smart weights
-      filteredList = suggestions
-        .map(s => ({
-          ...s,
-          score: this.autocompleteEngine.scoreSuggestion(s.displayText || s.text, activeWord, s.type)
-        }))
-        .filter(s => (s.score ?? 0) > 0)
-        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-        .slice(0, 15);
+      // 2. Score using smart weights (if empty after dot, show all ranked by popularity)
+      if (activeWord === '') {
+        filteredList = suggestions.slice(0, 15);
+      } else {
+        filteredList = suggestions
+          .map(s => ({
+            ...s,
+            score: this.autocompleteEngine.scoreSuggestion(s.displayText || s.text, activeWord, s.type)
+          }))
+          .filter(s => (s.score ?? 0) > 0)
+          .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+          .slice(0, 15);
+      }
 
       if (filteredList.length === 0) {
         hideDropdown();
@@ -448,21 +459,27 @@ export class StudioView extends ItemView {
       dropdown.empty();
       activeIndex = 0;
 
+      // Render suggestions
       filteredList.forEach((item) => {
         const itemEl = dropdown.createDiv({ cls: 'suggestion-item' });
 
         const rawText = item.displayText || item.text;
         const label = itemEl.createSpan({ cls: 'cds-suggest-label' });
 
-        const matchIdx = rawText.toLowerCase().indexOf(activeWord);
-        if (matchIdx !== -1) {
-          label.createSpan({ text: rawText.substring(0, matchIdx) });
-          label.createSpan({ 
-            cls: 'cds-suggest-match', 
-            text: rawText.substring(matchIdx, matchIdx + activeWord.length) 
-          });
-          label.createSpan({ text: rawText.substring(matchIdx + activeWord.length) });
+        if (activeWord) {
+          const matchIdx = rawText.toLowerCase().indexOf(activeWord);
+          if (matchIdx !== -1) {
+            label.createSpan({ text: rawText.substring(0, matchIdx) });
+            label.createSpan({ 
+              cls: 'cds-suggest-match', 
+              text: rawText.substring(matchIdx, matchIdx + activeWord.length) 
+            });
+            label.createSpan({ text: rawText.substring(matchIdx + activeWord.length) });
+          } else {
+            label.textContent = rawText;
+          }
         } else {
+          // Triggered immediately upon typing dot (.) with nothing typed yet
           label.textContent = rawText;
         }
 
@@ -481,7 +498,7 @@ export class StudioView extends ItemView {
       const coords = computeCaretPosition(pos);
       dropdown.style.display = 'block';
 
-      // Smart viewport collision detection
+      // Smart Viewport Collision Detection
       const editorHeight = editArea.clientHeight;
       const editorWidth = editArea.clientWidth;
       const menuHeight = dropdown.offsetHeight || 200;
@@ -498,7 +515,7 @@ export class StudioView extends ItemView {
       dropdown.style.top = `${topPos}px`;
       dropdown.style.left = `${leftPos}px`;
       updateSelectionHighlight();
-    });
+    }));
 
     textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       if (dropdown.style.display === 'block') {

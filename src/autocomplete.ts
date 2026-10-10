@@ -251,17 +251,26 @@ export class AutocompleteEngine {
     return Math.max(score, 1);
   }
 
-  private cleanSuggestions(list: AutocompleteSuggestion[], activeWord: string): AutocompleteSuggestion[] {
+private cleanSuggestions(list: AutocompleteSuggestion[], activeWord: string): AutocompleteSuggestion[] {
     const seen = new Set<string>();
     const out: AutocompleteSuggestion[] = [];
     const lowerActive = activeWord.toLowerCase();
 
     for (const item of list) {
       const key = (item.displayText || item.text).toLowerCase().replace(/[();"']/g, '');
-      if (seen.has(key) || key === lowerActive) continue;
+      // Skip duplicate OR exact active match
+      if (seen.has(key) || (lowerActive && key === lowerActive)) continue;
       seen.add(key);
-      out.push(item);
+
+      const weight = TOKEN_WEIGHTS[key] || TOKEN_WEIGHTS[item.text] || 0;
+      out.push({ ...item, weight });
     }
+
+    // When typing dot (.) with no letters yet, sort by popularity so log() is on top
+    if (!activeWord) {
+      out.sort((a, b) => (b.weight || 0) - (a.weight || 0));
+    }
+
     return out;
   }
 
