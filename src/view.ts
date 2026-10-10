@@ -1,16 +1,10 @@
 // view.ts
-import { ItemView, WorkspaceLeaf, Notice, TFile, TFolder } from 'obsidian';
+import { ItemView, WorkspaceLeaf, Notice, TFile } from 'obsidian';
 import CustomDatabaseStudioPlugin, { VersionSnapshot } from './main';
 import { VersionPromptModal, ConfirmModal } from './modals';
+import { AutocompleteEngine, AutocompleteSuggestion } from './autocomplete';
 
 export const VIEW_TYPE_STUDIO = "custom-database-studio-view";
-
-interface AutocompleteSuggestion {
-  text: string;
-  displayText?: string;
-  type: 'html' | 'attr' | 'css-prop' | 'css-var' | 'dv' | 'vault' | 'prop' | 'buffer';
-  score?: number;
-}
 
 interface SyntaxErrorDetail {
   line: number;
@@ -20,20 +14,12 @@ interface SyntaxErrorDetail {
 export class StudioView extends ItemView {
   plugin: CustomDatabaseStudioPlugin;
   currentFile: TFile | null = null;
-
-  // Dynamic collections
-  dynamicVaultFolders: string[] = [];
-  dynamicVaultTags: string[] = [];
-  dynamicFrontmatterKeys: string[] = [];
-  dynamicHtmlTags: string[] = [];
-  dynamicHtmlAttributes: string[] = [];
-  dynamicCssProperties: string[] = [];
-  dynamicCssVariables: string[] = [];
-  dynamicDataviewApi: string[] = [];
+  autocompleteEngine: AutocompleteEngine;
 
   constructor(leaf: WorkspaceLeaf, plugin: CustomDatabaseStudioPlugin) {
     super(leaf);
     this.plugin = plugin;
+    this.autocompleteEngine = new AutocompleteEngine(this.app);
   }
 
   getViewType(): string { 
@@ -49,38 +35,31 @@ export class StudioView extends ItemView {
    */
   getRuntimeHelpers(containerEl: HTMLElement, htmlContent: string) {
     const app = this.app;
-    
-    // Auto-inject HTML
     containerEl.innerHTML = htmlContent;
 
     const $ = (sel: string) => containerEl.querySelector(sel);
     const $$ = (sel: string) => containerEl.querySelectorAll(sel);
 
     const db = {
-      // 1. Universal Query: Preserves all dynamic frontmatter properties
       query: (source: string, fallback: any[] = []): any[] => {
         try {
           const dv = (app as any).plugins?.plugins?.dataview?.api;
           if (dv && dv.pages) {
             const pages = dv.pages(source);
             if (pages && pages.length > 0) {
-              return pages.map((p: any) => {
-                const item: Record<string, any> = { ...p };
-                item.path = p.file?.path || '#';
-                item.name = p.file?.name || '';
-                item.basename = p.file?.basename || '';
-                item.tags = p.file?.tags || [];
-                item.mtime = p.file?.mtime;
-                item.ctime = p.file?.ctime;
-                return item;
-              }).values;
+              return pages.map((p: any) => ({
+                ...p,
+                path: p.file?.path || '#',
+                name: p.file?.name || '',
+                basename: p.file?.basename || '',
+                tags: p.file?.tags || []
+              })).values;
             }
           }
         } catch (e) {}
         return fallback;
       },
 
-      // 2. Universal Link Opener
       openNote: (path: string) => {
         if (!path || path === '#') {
           new Notice("Preview mode: Link clicked");
@@ -89,7 +68,6 @@ export class StudioView extends ItemView {
         app.workspace.openLinkText(path, "", false);
       },
 
-      // 3. Universal Note Creator
       createNote: async (opts: { 
         folder?: string; 
         name?: string; 
@@ -131,7 +109,6 @@ export class StudioView extends ItemView {
         }
       },
 
-      // 4. Universal Frontmatter Updater (Interactive edits directly from the UI)
       updateNote: async (path: string, updater: (frontmatter: Record<string, any>) => void): Promise<boolean> => {
         const file = app.vault.getAbstractFileByPath(path);
         if (file instanceof TFile) {
@@ -145,7 +122,6 @@ export class StudioView extends ItemView {
         return false;
       },
 
-      // 5. Universal List / Grid Renderer
       renderList: (selector: string, items: any[], templateFn: (item: any) => string, emptyHtml = '<div class="cds-empty">No items found</div>') => {
         const target = containerEl.querySelector(selector);
         if (!target) return;
@@ -156,7 +132,6 @@ export class StudioView extends ItemView {
         target.innerHTML = items.map(templateFn).join("");
       },
 
-      // 6. Universal Filter / Tabs Controller
       bindFilter: (selector: string, options: string[], onSelect: (selected: string) => void) => {
         const bar = containerEl.querySelector(selector);
         if (!bar) return;
@@ -182,101 +157,6 @@ export class StudioView extends ItemView {
     return { db, $, $$ };
   }
 
-  async loadVaultIntelligence() {
-    // 1. Dynamic HTML tags
-    const htmlSet = new Set<string>();
-    for (const key of Object.getOwnPropertyNames(window)) {
-      const match = key.match(/^HTML([A-Za-z0-9]+)Element$/);
-      if (match && match[1]) {
-        const tag = match[1].toLowerCase();
-        if (tag && tag !== 'unknown' && tag !== 'heading') htmlSet.add(tag);
-      }
-    }
-    ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'span', 'p', 'a', 'img', 'ul', 'ol', 'li', 
-     'table', 'thead', 'tbody', 'tr', 'th', 'td', 'form', 'input', 'button', 'select', 'option', 
-     'textarea', 'label', 'section', 'article', 'nav', 'header', 'footer', 'main', 'aside'].forEach(t => htmlSet.add(t));
-    this.dynamicHtmlTags = Array.from(htmlSet).sort();
-
-    // 2. Dynamic HTML attributes
-    const attrSet = new Set<string>(['class', 'id', 'src', 'href', 'style', 'alt', 'title', 'type', 'value', 'placeholder', 'target', 'data-']);
-    const dummyEl = document.createElement('div');
-    for (const key in dummyEl) {
-      if (key.startsWith('on')) attrSet.add(key);
-    }
-    this.dynamicHtmlAttributes = Array.from(attrSet).sort();
-
-    // 3. Dynamic CSS properties
-    const cssPropSet = new Set<string>();
-    const styleProto = document.body.style;
-    for (const prop in styleProto) {
-      if (typeof styleProto[prop] === 'string' && !prop.startsWith('webkit') && !prop.startsWith('moz')) {
-        const kebab = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
-        if (kebab && !kebab.startsWith('-') && isNaN(Number(kebab))) cssPropSet.add(kebab);
-      }
-    }
-    this.dynamicCssProperties = Array.from(cssPropSet).sort();
-
-    // 4. Dynamic CSS variables
-    const cssVarSet = new Set<string>();
-    for (const sheet of Array.from(document.styleSheets)) {
-      try {
-        const rules = sheet.cssRules || sheet.rules;
-        for (const rule of Array.from(rules)) {
-          if (rule instanceof CSSStyleRule && (rule.selectorText === ':root' || rule.selectorText === 'body')) {
-            for (let i = 0; i < rule.style.length; i++) {
-              const varName = rule.style[i];
-              if (varName && varName.startsWith('--')) cssVarSet.add(varName);
-            }
-          }
-        }
-      } catch (e) {}
-    }
-    ['--background-primary', '--background-secondary', '--background-modifier-border', 
-     '--background-modifier-hover', '--text-normal', '--text-muted', '--interactive-accent', 
-     '--text-on-accent', '--text-error', '--font-monospace'].forEach(v => cssVarSet.add(v));
-    this.dynamicCssVariables = Array.from(cssVarSet).sort();
-
-    // 5. Dynamic Dataview API introspection
-    const dvApi = (this.app as any).plugins?.plugins?.dataview?.api;
-    if (dvApi) {
-      const dvKeys = new Set<string>([...Object.keys(dvApi), ...Object.getOwnPropertyNames(Object.getPrototypeOf(dvApi) || {})]);
-      this.dynamicDataviewApi = Array.from(dvKeys).map(k => typeof dvApi[k] === 'function' ? `dv.${k}()` : `dv.${k}`);
-    } else {
-      this.dynamicDataviewApi = ['dv.pages()', 'dv.page()', 'dv.current()', 'dv.array()', 'dv.table()', 'dv.list()', 'dv.header()'];
-    }
-
-    // 6. Vault folders, tags, and properties
-    const folderSet = new Set<string>();
-    const allFiles = this.app.vault.getAllLoadedFiles();
-    for (const file of allFiles) {
-      if (file instanceof TFolder && file.path && file.path !== '/') {
-        folderSet.add(`"${file.path}"`);
-      }
-    }
-    this.dynamicVaultFolders = Array.from(folderSet).sort();
-
-    const tagsObj = (this.app.metadataCache as any).getTags?.() || {};
-    this.dynamicVaultTags = Object.keys(tagsObj).map(t => `"${t}"`);
-
-    const keySet = new Set<string>();
-    const markdownFiles = this.app.vault.getMarkdownFiles();
-    for (const file of markdownFiles) {
-      const cache = this.app.metadataCache.getFileCache(file);
-      if (cache?.frontmatter) {
-        Object.keys(cache.frontmatter).forEach(k => {
-          if (k !== 'position') keySet.add(k);
-        });
-      }
-    }
-    this.dynamicFrontmatterKeys = Array.from(keySet).sort();
-  }
-
-  getBufferTokens(content: string): string[] {
-    const matches = content.match(/\b[a-zA-Z_$][a-zA-Z0-9_$]{2,}\b/g);
-    if (!matches) return [];
-    return Array.from(new Set(matches));
-  }
-
   resolveVersion(versions: VersionSnapshot[], targetIdx: number) {
     let html = "";
     let css = "";
@@ -290,32 +170,6 @@ export class StudioView extends ItemView {
       }
     }
     return { html, css, js };
-  }
-
-  scoreSuggestion(target: string, query: string, type: string): number {
-    const text = target.toLowerCase();
-    const q = query.toLowerCase();
-
-    if (!q || !text.includes(q)) return 0;
-    if (text === q) return 1000;
-
-    let score = 0;
-    if (text.startsWith(q)) {
-      score = 600 - (text.length - q.length) * 3;
-    } else if (new RegExp(`[\\-_.:]${q}`, 'i').test(text)) {
-      score = 400 - text.length * 2;
-    } else {
-      const idx = text.indexOf(q);
-      score = 150 - (idx * 10) - (text.length * 2);
-    }
-
-    const commonHtml = new Set(['div', 'span', 'p', 'a', 'img', 'button', 'input', 'ul', 'li', 'h1', 'h2', 'h3']);
-    if (type === 'html' && commonHtml.has(text)) score += 30;
-
-    const commonCss = new Set(['display', 'flex', 'grid', 'color', 'background', 'margin', 'padding', 'width', 'height', 'border']);
-    if (type === 'css-prop' && commonCss.has(text)) score += 30;
-
-    return Math.max(score, 1);
   }
 
   highlightCode(code: string, mode: 'html' | 'css' | 'js'): string {
@@ -453,14 +307,12 @@ export class StudioView extends ItemView {
     const errorBar = editorRoot.createDiv({ cls: 'cds-error-banner' });
     errorBar.style.display = 'none';
 
-    // Autocomplete dropdown
     const dropdown = editArea.createDiv({ cls: 'suggestion-container cds-autocomplete-menu' });
 
     let activeIndex = 0;
     let filteredList: AutocompleteSuggestion[] = [];
     let replaceStartPos = 0;
 
-    // GPU-accelerated scroll synchronization
     const syncScroll = () => {
       highlightCodeEl.style.transform = `translate3d(-${textarea.scrollLeft}px, -${textarea.scrollTop}px, 0)`;
       gutter.scrollTop = textarea.scrollTop;
@@ -560,116 +412,15 @@ export class StudioView extends ItemView {
       return coords;
     };
 
-    const getSuggestionsForContext = (textBefore: string): { suggestions: AutocompleteSuggestion[], startOffset: number } => {
-      const bufferWords = this.getBufferTokens(textarea.value);
-
-      if (mode === 'html') {
-        const tagMatch = textBefore.match(/<([a-zA-Z0-9-]*)$/);
-        if (tagMatch) {
-          const query = tagMatch[1] ?? '';
-          return {
-            startOffset: query.length,
-            suggestions: this.dynamicHtmlTags.map(t => ({ text: t, type: 'html' as const }))
-          };
-        }
-
-        const attrMatch = textBefore.match(/\s+([a-zA-Z0-9-]*)$/);
-        if (attrMatch && !textBefore.endsWith('>')) {
-          const query = attrMatch[1] ?? '';
-          return {
-            startOffset: query.length,
-            suggestions: this.dynamicHtmlAttributes.map(a => ({ text: `${a}=""`, displayText: a, type: 'attr' as const }))
-          };
-        }
-      }
-
-      if (mode === 'css') {
-        const varMatch = textBefore.match(/var\((--[a-zA-Z0-9-]*)$/);
-        if (varMatch) {
-          const query = varMatch[1] ?? '';
-          return {
-            startOffset: query.length,
-            suggestions: this.dynamicCssVariables.map(v => ({ text: `${v})`, displayText: v, type: 'css-var' as const }))
-          };
-        }
-
-        const propMatch = textBefore.match(/([a-zA-Z-]*)$/);
-        if (propMatch) {
-          const query = propMatch[1] ?? '';
-          return {
-            startOffset: query.length,
-            suggestions: [
-              ...this.dynamicCssProperties.map(p => ({ text: `${p}: `, displayText: p, type: 'css-prop' as const })),
-              ...this.dynamicCssVariables.map(v => ({ text: `var(${v});`, displayText: v, type: 'css-var' as const }))
-            ]
-          };
-        }
-      }
-
-      if (mode === 'js') {
-        if (/dv\.pages\([^)]*$/.test(textBefore)) {
-          const match = textBefore.match(/dv\.pages\(([^)]*)$/);
-          const query = match?.[1]?.replace(/["']/g, '') ?? '';
-          return {
-            startOffset: query.length,
-            suggestions: [
-              ...this.dynamicVaultFolders.map(f => ({ text: `${f})`, displayText: f, type: 'vault' as const })),
-              ...this.dynamicVaultTags.map(t => ({ text: `${t})`, displayText: t, type: 'vault' as const }))
-            ]
-          };
-        }
-
-        if (textBefore.endsWith('dv.')) {
-          return {
-            startOffset: 0,
-            suggestions: this.dynamicDataviewApi.map(api => ({
-              text: api.replace(/^dv\./, ''),
-              displayText: api,
-              type: 'dv' as const
-            }))
-          };
-        }
-
-        if (/(\w+)\.$/.test(textBefore)) {
-          return {
-            startOffset: 0,
-            suggestions: this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const }))
-          };
-        }
-
-        const tokenMatch = textBefore.match(/([a-zA-Z0-9_$]+)$/);
-        if (tokenMatch) {
-          const query = tokenMatch[1] ?? '';
-          return {
-            startOffset: query.length,
-            suggestions: [
-              ...this.dynamicDataviewApi.map(d => ({ text: d, type: 'dv' as const })),
-              ...this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const })),
-              ...bufferWords.map(w => ({ text: w, type: 'buffer' as const }))
-            ]
-          };
-        }
-      }
-
-      const wordMatch = textBefore.match(/([a-zA-Z0-9_-]+)$/);
-      if (wordMatch) {
-        const query = wordMatch[1] ?? '';
-        return {
-          startOffset: query.length,
-          suggestions: bufferWords.map(w => ({ text: w, type: 'buffer' as const }))
-        };
-      }
-
-      return { suggestions: [], startOffset: 0 };
-    };
-
     textarea.addEventListener('input', () => {
       renderGutterAndHighlight();
       onChange(textarea.value);
 
       const pos = textarea.selectionStart;
       const textBefore = textarea.value.substring(0, pos);
-      const { suggestions, startOffset } = getSuggestionsForContext(textBefore);
+
+      // 1. Get suggestions through dedicated engine
+      const { suggestions, startOffset } = this.autocompleteEngine.getSuggestions(textBefore, textarea.value, mode);
 
       const activeWord = textBefore.substring(pos - startOffset).toLowerCase();
       if (!activeWord || activeWord.length < 1) {
@@ -679,10 +430,11 @@ export class StudioView extends ItemView {
 
       replaceStartPos = pos - startOffset;
 
+      // 2. Score using smart weights
       filteredList = suggestions
         .map(s => ({
           ...s,
-          score: this.scoreSuggestion(s.displayText || s.text, activeWord, s.type)
+          score: this.autocompleteEngine.scoreSuggestion(s.displayText || s.text, activeWord, s.type)
         }))
         .filter(s => (s.score ?? 0) > 0)
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
@@ -696,7 +448,6 @@ export class StudioView extends ItemView {
       dropdown.empty();
       activeIndex = 0;
 
-      // High-contrast vibrant autocomplete rendering
       filteredList.forEach((item) => {
         const itemEl = dropdown.createDiv({ cls: 'suggestion-item' });
 
@@ -730,23 +481,18 @@ export class StudioView extends ItemView {
       const coords = computeCaretPosition(pos);
       dropdown.style.display = 'block';
 
-      // Smart Viewport Collision Detection
+      // Smart viewport collision detection
       const editorHeight = editArea.clientHeight;
       const editorWidth = editArea.clientWidth;
       const menuHeight = dropdown.offsetHeight || 200;
       const menuWidth = 290;
 
-      let topPos = coords.top + 22; // Default: appear below the cursor
-
-      // If it overflows the bottom AND there is room above, flip it ABOVE the cursor
+      let topPos = coords.top + 22;
       if (topPos + menuHeight > editorHeight && coords.top - menuHeight > 0) {
-        topPos = coords.top - menuHeight - 6;
+        topPos = coords.top - menuHeight - 6; // Flip above cursor
       }
 
-      // Hard clamp: Never let it escape the top or bottom of the editor pane
       topPos = Math.max(4, Math.min(topPos, Math.max(4, editorHeight - menuHeight - 6)));
-
-      // Horizontal clamp: Keep within left and right boundaries
       const leftPos = Math.max(4, Math.min(coords.left, Math.max(4, editorWidth - menuWidth - 8)));
 
       dropdown.style.top = `${topPos}px`;
@@ -756,6 +502,21 @@ export class StudioView extends ItemView {
 
     textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       if (dropdown.style.display === 'block') {
+        // Tab / Shift+Tab Cycling
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            // Shift + Tab: Cycle backward
+            activeIndex = (activeIndex - 1 + filteredList.length) % filteredList.length;
+          } else {
+            // Tab: Cycle forward
+            activeIndex = (activeIndex + 1) % filteredList.length;
+          }
+          updateSelectionHighlight();
+          return;
+        }
+
+        // Arrow Key Navigation
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           activeIndex = (activeIndex + 1) % filteredList.length;
@@ -768,7 +529,9 @@ export class StudioView extends ItemView {
           updateSelectionHighlight();
           return;
         }
-        if (e.key === 'Enter' || e.key === 'Tab') {
+
+        // Enter to Complete
+        if (e.key === 'Enter') {
           const selectedItem = filteredList[activeIndex];
           if (selectedItem) {
             e.preventDefault();
@@ -776,12 +539,14 @@ export class StudioView extends ItemView {
             return;
           }
         }
+
         if (e.key === 'Escape') {
           hideDropdown();
           return;
         }
       }
 
+      // Normal Tab indentation when popup is not open
       if (e.key === 'Tab' && dropdown.style.display !== 'block') {
         e.preventDefault();
         const start = textarea.selectionStart;
@@ -793,6 +558,7 @@ export class StudioView extends ItemView {
         return;
       }
 
+      // Auto-closing brackets and quotes
       const pairs: Record<string, string> = { '"': '"', "'": "'", '(': ')', '{': '}', '[': ']', '`': '`' };
       if (pairs[e.key]) {
         const start = textarea.selectionStart;
@@ -815,7 +581,6 @@ export class StudioView extends ItemView {
       setTimeout(hideDropdown, 200);
     });
 
-    // Initial render
     renderGutterAndHighlight();
 
     return {
@@ -828,7 +593,7 @@ export class StudioView extends ItemView {
   }
 
   async onOpen() {
-    await this.loadVaultIntelligence();
+    await this.autocompleteEngine.indexVault();
 
     const container = this.contentEl;
     container.empty();
@@ -905,8 +670,6 @@ export class StudioView extends ItemView {
       try {
         const dvApi = (this.app as any).plugins?.plugins?.dataview?.api;
         const { db, $, $$ } = this.getRuntimeHelpers(bodyDiv, htmlCode);
-
-        // Expose db to window so onclick="db.openNote(...)" works inside HTML attributes
         (window as any).db = db;
 
         const executeFn = new Function('container', 'htmlContent', 'app', 'notice', 'dv', 'db', '$', '$$', jsCode);
@@ -1184,7 +947,6 @@ export class StudioView extends ItemView {
       cssPane.toggleClass('active', tab === 'css');
       jsPane.toggleClass('active', tab === 'js');
 
-      // Trigger repaint to align gutters upon unhiding
       if (tab === 'html') htmlEditor.setValue(htmlEditor.getValue());
       if (tab === 'css') cssEditor.setValue(cssEditor.getValue());
       if (tab === 'js') jsEditor.setValue(jsEditor.getValue());
