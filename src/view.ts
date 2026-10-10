@@ -787,30 +787,51 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     previewWrapper.createEl('h4', { text: 'Live Preview Output', attr: { style: 'margin-top:0; margin-bottom:8px; font-size:0.85rem; color:var(--text-muted);' } });
     const previewContainer = previewWrapper.createDiv();
 
-    const runCode = () => {
+const runCode = () => {
+      // 1. Clean up active animation loops from previous runs
+      if ((window as any).__pong_raf) {
+        cancelAnimationFrame((window as any).__pong_raf);
+        (window as any).__pong_raf = null;
+      }
+
       previewContainer.empty();
-      const shadowHost = previewContainer.createDiv();
-      const shadow = shadowHost.attachShadow({ mode: 'open' });
 
-      const styleTag = document.createElement('style');
-      styleTag.textContent = cssCode;
-      shadow.appendChild(styleTag);
+      // 2. Mirror the exact Obsidian Dataview DOM container (NO Shadow DOM)
+      const noteSimWrapper = previewContainer.createDiv({ 
+        cls: 'block-language-dataviewjs cds-preview-sim-root' 
+      });
 
-      const bodyDiv = document.createElement('div');
-      shadow.appendChild(bodyDiv);
+      // 3. Apply the styles dynamically to the preview container
+      const previewStyleId = 'cds-preview-active-styles';
+      let styleEl = previewContainer.querySelector(`#${previewStyleId}`) as HTMLStyleElement | null;
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = previewStyleId;
+        previewContainer.prepend(styleEl);
+      }
+      styleEl.innerHTML = cssCode;
 
+      // 4. Inject HTML into the container exactly like Dataview does
+      const { db, $, $$ } = this.getRuntimeHelpers(noteSimWrapper, htmlCode);
+      (window as any).db = db;
+
+      // 5. Execute with the exact same 'this' context as Dataview
       try {
         const dvApi = (this.app as any).plugins?.plugins?.dataview?.api;
-        const { db, $, $$ } = this.getRuntimeHelpers(bodyDiv, htmlCode);
-        (window as any).db = db;
+        const dataviewContext = {
+          container: noteSimWrapper,
+          app: this.app,
+          dv: dvApi ? Object.assign(Object.create(dvApi), { container: noteSimWrapper }) : null
+        };
 
         const executeFn = new Function('container', 'htmlContent', 'app', 'notice', 'dv', 'db', '$', '$$', jsCode);
-        executeFn(bodyDiv, htmlCode, this.app, (msg: string) => new Notice(msg), dvApi, db, $, $$);
+        executeFn.call(dataviewContext, noteSimWrapper, htmlCode, this.app, (msg: string) => new Notice(msg), dvApi, db, $, $$);
       } catch (err: any) {
-        const errDiv = document.createElement('div');
+        const errDiv = noteSimWrapper.createDiv({ cls: 'cds-runtime-error' });
         errDiv.style.color = 'var(--text-error)';
+        errDiv.style.fontFamily = 'var(--font-monospace)';
+        errDiv.style.padding = '10px';
         errDiv.innerText = `Runtime Error: ${err.message}`;
-        shadow.appendChild(errDiv);
       }
     };
 

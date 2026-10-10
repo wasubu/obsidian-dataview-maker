@@ -339,3 +339,12 @@ textarea.cds-textarea-layer::selection {
   overflow: auto; 
   padding: 12px; 
 }
+
+/* Simulated Dataview Root for 1:1 Live Preview */
+.cds-preview-sim-root {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  min-height: 100% !important;
+  box-sizing: border-box !important;
+}
