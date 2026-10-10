@@ -1,5 +1,5 @@
 // autocomplete.ts
-import { App, TFolder, TFile } from 'obsidian';
+import { App, TFolder } from 'obsidian';
 
 export interface AutocompleteSuggestion {
   text: string;
@@ -10,10 +10,9 @@ export interface AutocompleteSuggestion {
 }
 
 const TOKEN_WEIGHTS: Record<string, number> = {
-  // JavaScript Top Keywords
+  // Top-Level JS Keywords
   'const': 95,
-  'console.log': 90,
-  'console': 85,
+  'console': 90,
   'let': 85,
   'function': 85,
   'return': 80,
@@ -22,17 +21,24 @@ const TOKEN_WEIGHTS: Record<string, number> = {
   'if': 75,
   'for': 70,
 
-  // Universal Database Studio API
-  'db.query': 100,
-  'db.createNote': 95,
-  'db.renderList': 95,
-  'db.bindFilter': 90,
-  'db.openNote': 90,
-  'db.updateNote': 85,
+  // Top-Level Studio Identifiers
+  'db': 95,
   '$': 90,
   '$$': 85,
-  'dv.pages': 90,
-  'dv.current': 85,
+  'dv': 85,
+
+  // Member Methods (Accessed via dot)
+  'log()': 95,
+  'query()': 95,
+  'createNote()': 90,
+  'renderList()': 90,
+  'bindFilter()': 85,
+  'openNote()': 85,
+  'updateNote()': 80,
+  'map()': 90,
+  'filter()': 85,
+  'forEach()': 80,
+  'length': 85,
 
   // HTML Common Elements
   'div': 100,
@@ -123,9 +129,9 @@ export class AutocompleteEngine {
     const dvApi = (this.app as any).plugins?.plugins?.dataview?.api;
     if (dvApi) {
       const dvKeys = new Set<string>([...Object.keys(dvApi), ...Object.getOwnPropertyNames(Object.getPrototypeOf(dvApi) || {})]);
-      this.dynamicDataviewApi = Array.from(dvKeys).map(k => typeof dvApi[k] === 'function' ? `dv.${k}()` : `dv.${k}`);
+      this.dynamicDataviewApi = Array.from(dvKeys).map(k => typeof dvApi[k] === 'function' ? `${k}()` : `${k}`);
     } else {
-      this.dynamicDataviewApi = ['dv.pages()', 'dv.current()', 'dv.array()', 'dv.table()', 'dv.list()'];
+      this.dynamicDataviewApi = ['pages()', 'current()', 'array()', 'table()', 'list()', 'header()', 'paragraph()'];
     }
 
     // 6. Vault Folders, Tags, Frontmatter
@@ -173,6 +179,36 @@ export class AutocompleteEngine {
     return false;
   }
 
+  /**
+   * Checks whether the current cursor is inside a string literal
+   * (Allows interpolation ${ ... } inside template literals)
+   */
+  isInsideString(textBefore: string): boolean {
+    // 1. Check backticks (Template Literals)
+    const backtickMatches = textBefore.match(/(?<!\\)`/g);
+    if (backtickMatches && backtickMatches.length % 2 === 1) {
+      const lastBacktick = textBefore.lastIndexOf('`');
+      const textInBacktick = textBefore.substring(lastBacktick);
+      const openInterp = (textInBacktick.match(/\${/g) || []).length;
+      const closeInterp = (textInBacktick.match(/}/g) || []).length;
+      // If inside ${ ... }, we are writing code, NOT in a string
+      if (openInterp > closeInterp) {
+        return false;
+      }
+      return true;
+    }
+
+    // 2. Check single & double quotes on current line
+    const currentLine = textBefore.substring(textBefore.lastIndexOf('\n') + 1);
+    const singleQuotes = (currentLine.match(/(?<!\\)'/g) || []).length;
+    if (singleQuotes % 2 === 1) return true;
+
+    const doubleQuotes = (currentLine.match(/(?<!\\)"/g) || []).length;
+    if (doubleQuotes % 2 === 1) return true;
+
+    return false;
+  }
+
   getBufferTokens(content: string, excludeWord: string): string[] {
     const matches = content.match(/\b[a-zA-Z_$][a-zA-Z0-9_$]{1,}\b/g);
     if (!matches) return [];
@@ -190,8 +226,7 @@ export class AutocompleteEngine {
     const text = target.toLowerCase();
     const q = query.toLowerCase();
 
-    // NEVER suggest the exact word currently being typed
-    if (text === q) return 0;
+    if (text === q) return 0; // Never suggest identical word
     if (!q || !text.includes(q)) return 0;
 
     const cleanWord = text.replace(/[^a-zA-Z0-9_.]/g, '');
@@ -203,7 +238,7 @@ export class AutocompleteEngine {
     if (text.startsWith(q)) {
       score = 600 + weightBoost - (text.length - q.length) * 2;
     }
-    // 2. Word boundary match ('db.query' matching 'query')
+    // 2. Word boundary match
     else if (new RegExp(`[\\-_.:]${q}`, 'i').test(text)) {
       score = 400 + weightBoost - text.length;
     }
@@ -216,9 +251,6 @@ export class AutocompleteEngine {
     return Math.max(score, 1);
   }
 
-  /**
-   * Helper that deduplicates suggestions and eliminates exact matches
-   */
   private cleanSuggestions(list: AutocompleteSuggestion[], activeWord: string): AutocompleteSuggestion[] {
     const seen = new Set<string>();
     const out: AutocompleteSuggestion[] = [];
@@ -226,7 +258,6 @@ export class AutocompleteEngine {
 
     for (const item of list) {
       const key = (item.displayText || item.text).toLowerCase().replace(/[();"']/g, '');
-      // Skip if already in list OR if it equals the word being typed
       if (seen.has(key) || key === lowerActive) continue;
       seen.add(key);
       out.push(item);
@@ -239,6 +270,7 @@ export class AutocompleteEngine {
     fullBuffer: string, 
     mode: 'html' | 'css' | 'js'
   ): { suggestions: AutocompleteSuggestion[], startOffset: number } {
+    // 1. Ignore if inside comments
     if (this.isInsideComment(textBefore, mode)) {
       return { suggestions: [], startOffset: 0 };
     }
@@ -268,10 +300,17 @@ export class AutocompleteEngine {
           )
         };
       }
+
+      // Outside tags in HTML, do not show random code keywords
+      return { suggestions: [], startOffset: 0 };
     }
 
     // --- CSS Context ---
     if (mode === 'css') {
+      if (this.isInsideString(textBefore)) {
+        return { suggestions: [], startOffset: 0 };
+      }
+
       const varMatch = textBefore.match(/var\((--[a-zA-Z0-9-]*)$/);
       if (varMatch) {
         const query = varMatch[1] ?? '';
@@ -299,7 +338,7 @@ export class AutocompleteEngine {
 
     // --- JavaScript Context ---
     if (mode === 'js') {
-      // Vault Folder/Tag queries
+      // 1. Vault Query Inside quotes: dv.pages("...") or db.query("...")
       if (/(?:dv\.pages|db\.query)\([^)]*$/.test(textBefore)) {
         const match = textBefore.match(/(?:dv\.pages|db\.query)\(([^)]*)$/);
         const query = match?.[1]?.replace(/["']/g, '') ?? '';
@@ -312,60 +351,95 @@ export class AutocompleteEngine {
         };
       }
 
-      // Member Access: db.
-      if (textBefore.endsWith('db.')) {
+      // 2. Ignore regular strings
+      if (this.isInsideString(textBefore)) {
+        return { suggestions: [], startOffset: 0 };
+      }
+
+      // 3. MEMBER ACCESS AFTER DOT (.) ONLY: object.method
+      const dotMatch = textBefore.match(/([a-zA-Z0-9_$]+)\.([a-zA-Z0-9_$]*)$/);
+      if (dotMatch) {
+        const objName = dotMatch[1];
+        const propQuery = dotMatch[2] ?? '';
+
+        // console.
+        if (objName === 'console') {
+          const consoleMethods = ['log()', 'warn()', 'error()', 'info()', 'table()', 'clear()', 'dir()', 'time()', 'timeEnd()'];
+          return {
+            startOffset: propQuery.length,
+            suggestions: this.cleanSuggestions(
+              consoleMethods.map(m => ({ text: m, type: 'builtin' })),
+              propQuery
+            )
+          };
+        }
+
+        // db.
+        if (objName === 'db') {
+          const dbMethods = ['query()', 'createNote()', 'renderList()', 'bindFilter()', 'openNote()', 'updateNote()'];
+          return {
+            startOffset: propQuery.length,
+            suggestions: this.cleanSuggestions(
+              dbMethods.map(m => ({ text: m, type: 'api' })),
+              propQuery
+            )
+          };
+        }
+
+        // dv.
+        if (objName === 'dv') {
+          return {
+            startOffset: propQuery.length,
+            suggestions: this.cleanSuggestions(
+              this.dynamicDataviewApi.map(api => ({
+                text: api,
+                type: 'dv'
+              })),
+              propQuery
+            )
+          };
+        }
+
+        // app.
+        if (objName === 'app') {
+          const appProps = ['vault', 'workspace', 'metadataCache', 'fileManager'];
+          return {
+            startOffset: propQuery.length,
+            suggestions: this.cleanSuggestions(
+              appProps.map(p => ({ text: p, type: 'builtin' })),
+              propQuery
+            )
+          };
+        }
+
+        // Array methods or Frontmatter property access (book.title, books.map)
+        const commonMethods = ['map()', 'filter()', 'forEach()', 'find()', 'includes()', 'slice()', 'join()', 'length', 'reduce()', 'push()'];
         return {
-          startOffset: 0,
-          suggestions: [
-            { text: 'query()', displayText: 'db.query()', type: 'api' },
-            { text: 'createNote()', displayText: 'db.createNote()', type: 'api' },
-            { text: 'renderList()', displayText: 'db.renderList()', type: 'api' },
-            { text: 'bindFilter()', displayText: 'db.bindFilter()', type: 'api' },
-            { text: 'openNote()', displayText: 'db.openNote()', type: 'api' },
-            { text: 'updateNote()', displayText: 'db.updateNote()', type: 'api' }
-          ]
+          startOffset: propQuery.length,
+          suggestions: this.cleanSuggestions([
+            ...this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const })),
+            ...commonMethods.map(m => ({ text: m, type: 'builtin' as const }))
+          ], propQuery)
         };
       }
 
-      // Member Access: dv.
-      if (textBefore.endsWith('dv.')) {
-        return {
-          startOffset: 0,
-          suggestions: this.dynamicDataviewApi.map(api => ({
-            text: api.replace(/^dv\./, ''),
-            displayText: api,
-            type: 'dv' as const
-          }))
-        };
-      }
-
-      // Frontmatter Property Access: item.
-      if (/(\w+)\.$/.test(textBefore)) {
-        return {
-          startOffset: 0,
-          suggestions: this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const }))
-        };
-      }
-
-      // General JavaScript Keywords & API
+      // 4. TOP-LEVEL SCOPE (No dot): Clean identifiers only
       const tokenMatch = textBefore.match(/([a-zA-Z0-9_$]+)$/);
       if (tokenMatch) {
         const query = tokenMatch[1] ?? '';
         const bufferWords = this.getBufferTokens(fullBuffer, query);
 
-        const jsKeywords = [
+        // ONLY pure language keywords and root objects (NO console.log or db.query!)
+        const jsTopLevel = [
           'const', 'let', 'function', 'return', 'if', 'else', 'for', 'while',
           'async', 'await', 'import', 'export', 'new', 'class', 'try', 'catch',
-          'console.log()', 'console', 'db.query()', 'db.createNote()', 'db.renderList()',
-          'db.bindFilter()', 'db.openNote()', 'db', '$', '$$'
+          'console', 'db', 'dv', 'app', '$', '$$'
         ];
 
         return {
           startOffset: query.length,
           suggestions: this.cleanSuggestions([
-            ...jsKeywords.map(k => ({ text: k, type: 'kw' as const })),
-            ...this.dynamicDataviewApi.map(d => ({ text: d, type: 'dv' as const })),
-            ...this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const })),
+            ...jsTopLevel.map(k => ({ text: k, type: 'kw' as const })),
             ...bufferWords.map(w => ({ text: w, type: 'buffer' as const }))
           ], query)
         };
