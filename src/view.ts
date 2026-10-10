@@ -821,7 +821,7 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
         if (match && match[1]) {
           const code = match[1];
 
-          const cssMatch = code.match(/style\.innerHTML\s*=\s*`([\s\S]*?)`;/);
+          const cssMatch = code.match(/style(?:El)?\.innerHTML\s*=\s*`([\s\S]*?)`;/);
           cssCode = cssMatch && cssMatch[1] ? cssMatch[1] : "";
           cssEditor.setValue(cssCode);
 
@@ -975,23 +975,32 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       ).open();
     };
 
-    saveBtn.onclick = async () => {
+saveBtn.onclick = async () => {
       if (!this.currentFile) {
         new Notice("Please select and load a vault note first!");
         return;
       }
       try {
         const uniqueId = `cds-style-${this.currentFile.basename.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+
+        // 1. Immediately hot-reload the style in Obsidian's DOM if the note is currently open
+        const activeStyleEl = document.getElementById(uniqueId) as HTMLStyleElement | null;
+        if (activeStyleEl) {
+          activeStyleEl.innerHTML = cssCode;
+        }
+
+        // 2. Build the self-updating DataviewJS code block
         const wrappedContent = [
           "```dataviewjs",
           "// --- CSS ---",
           `const styleId = "${uniqueId}";`,
-          'if (!document.getElementById(styleId)) {',
-          '  const style = document.createElement("style");',
-          '  style.id = styleId;',
-          `  style.innerHTML = \`${cssCode}\`;`,
-          '  document.head.appendChild(style);',
+          'let styleEl = document.getElementById(styleId);',
+          'if (!styleEl) {',
+          '  styleEl = document.createElement("style");',
+          '  styleEl.id = styleId;',
+          '  document.head.appendChild(styleEl);',
           '}',
+          `styleEl.innerHTML = \`${cssCode}\`;`,
           '',
           "// --- HTML ---",
           `const htmlContent = \`${htmlCode}\`;`,
@@ -1005,19 +1014,28 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
           '  query: (src, def = []) => {',
           '    try {',
           '      const p = (dv && dv.pages) ? dv.pages(src) : null;',
-          '      if (p && p.length > 0) return p.map(x => ({ ...x, path: x.file?.path || "#", name: x.file?.name || "", tags: x.file?.tags || [] })).values;',
+          '      if (p && p.length > 0) return p.map(x => ({',
+          '        ...x,',
+          '        name: x.file?.name || x.file?.basename || "Untitled",',
+          '        title: x.file?.name || x.file?.basename || x.title || "Untitled",',
+          '        path: x.file?.path || "#",',
+          '        tags: x.file?.tags || []',
+          '      })).values;',
           '    } catch (e) {}',
           '    return def;',
           '  },',
           '  openNote: (p) => { if (p && p !== "#") app.workspace.openLinkText(p, "", false); },',
           '  createNote: async (opt) => {',
           '    let f = opt.folder ? opt.folder.replace(/^\\/+|\\/+$/g, "") : "";',
-          '    let n = opt.name || opt.frontmatter?.title || "Untitled";',
+          '    let n = opt.name || opt.title || opt.frontmatter?.title || "Untitled";',
           '    if (f && !app.vault.getAbstractFileByPath(f)) await app.vault.createFolder(f);',
           '    let path = f ? `${f}/${n}.md` : `${n}.md`; let c = 1;',
-          '    while (app.vault.getAbstractFileByPath(path)) { path = f ? `${f}/${n} ${c}.md` : `${n} ${c}.md`; c++; }',
-          '    let y = opt.frontmatter ? "---\\n" + Object.entries(opt.frontmatter).map(([k,v]) => `${k}: ${JSON.stringify(v)}`).join("\\n") + "\\n---\\n\\n" : "";',
-          '    let file = await app.vault.create(path, y + (opt.content || `# ${n}\\n\\n`));',
+          '    let finalName = n;',
+          '    while (app.vault.getAbstractFileByPath(path)) { finalName = `${n} ${c}`; path = f ? `${f}/${finalName}.md` : `${finalName}.md`; c++; }',
+          '    let fm = { ...(opt.frontmatter || {}) };',
+          '    if (fm.title === n || !fm.title) fm.title = finalName;',
+          '    let y = Object.keys(fm).length > 0 ? "---\\n" + Object.entries(fm).map(([k,v]) => `${k}: ${JSON.stringify(v)}`).join("\\n") + "\\n---\\n\\n" : "";',
+          '    let file = await app.vault.create(path, y + (opt.content || `# ${finalName}\\n\\n`));',
           '    if (opt.open !== false) await app.workspace.getLeaf().openFile(file);',
           '    return file;',
           '  },',
