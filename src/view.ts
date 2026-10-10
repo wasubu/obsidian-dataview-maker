@@ -47,6 +47,9 @@ export class StudioView extends ItemView {
   /**
    * Generates the reusable client-side helper runtime for DataviewJS
    */
+/**
+   * Universal DataviewJS Runtime Helpers (Domain-Agnostic)
+   */
   getRuntimeHelpers(containerEl: HTMLElement, htmlContent: string) {
     const app = this.app;
     
@@ -57,55 +60,72 @@ export class StudioView extends ItemView {
     const $$ = (sel: string) => containerEl.querySelectorAll(sel);
 
     const db = {
-      // 1. Safe Vault query with mock data fallback
-      query: (source: string, fallback: any[] = []) => {
+      // 1. Universal Query: Preserves all dynamic frontmatter properties
+      query: (source: string, fallback: any[] = []): any[] => {
         try {
           const dv = (app as any).plugins?.plugins?.dataview?.api;
           if (dv && dv.pages) {
-            const res = dv.pages(source).map((p: any) => ({
-              ...p,
-              path: p.file?.path || "#",
-              name: p.file?.name || ""
-            })).values;
-            if (res && res.length > 0) return res;
+            const pages = dv.pages(source);
+            if (pages && pages.length > 0) {
+              return pages.map((p: any) => {
+                const item: Record<string, any> = { ...p };
+                item.path = p.file?.path || '#';
+                item.name = p.file?.name || '';
+                item.basename = p.file?.basename || '';
+                item.tags = p.file?.tags || [];
+                item.mtime = p.file?.mtime;
+                item.ctime = p.file?.ctime;
+                return item;
+              }).values;
+            }
           }
         } catch (e) {}
         return fallback;
       },
 
-      // 2. Safe link open
+      // 2. Universal Link Opener
       openNote: (path: string) => {
         if (!path || path === '#') {
-          new Notice("Preview mode link clicked");
+          new Notice("Preview mode: Link clicked");
           return;
         }
         app.workspace.openLinkText(path, "", false);
       },
 
-      // 3. Create Note with auto-increment, folder creation & YAML frontmatter
-      createNote: async (opts: { folder?: string; title?: string; frontmatter?: Record<string, any>; open?: boolean }): Promise<TFile | null> => {
-        const folder = opts.folder || "";
-        const baseTitle = opts.title || "Untitled";
+      // 3. Universal Note Creator
+      createNote: async (opts: { 
+        folder?: string; 
+        name?: string; 
+        frontmatter?: Record<string, any>; 
+        content?: string; 
+        open?: boolean 
+      }): Promise<TFile | null> => {
+        const folder = opts.folder ? opts.folder.replace(/^\/+|\/+$/g, '') : "";
+        const baseName = opts.name || opts.frontmatter?.title || opts.frontmatter?.name || "Untitled";
         try {
           if (folder && !app.vault.getAbstractFileByPath(folder)) {
             await app.vault.createFolder(folder);
           }
-          let filePath = folder ? `${folder}/${baseTitle}.md` : `${baseTitle}.md`;
+          let filePath = folder ? `${folder}/${baseName}.md` : `${baseName}.md`;
           let counter = 1;
           while (app.vault.getAbstractFileByPath(filePath)) {
-            filePath = folder ? `${folder}/${baseTitle} ${counter}.md` : `${baseTitle} ${counter}.md`;
+            filePath = folder ? `${folder}/${baseName} ${counter}.md` : `${baseName} ${counter}.md`;
             counter++;
           }
 
           let yaml = "";
           if (opts.frontmatter) {
-            yaml = "---\n" + Object.entries(opts.frontmatter).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n") + "\n---\n\n";
+            yaml = "---\n" + Object.entries(opts.frontmatter)
+              .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+              .join("\n") + "\n---\n\n";
           }
-          const file = await app.vault.create(filePath, `${yaml}# ${baseTitle}\n\n`);
+          const body = opts.content || `# ${baseName}\n\n`;
+          const file = await app.vault.create(filePath, yaml + body);
+          
           if (opts.open !== false) {
             await app.workspace.getLeaf().openFile(file);
           }
-          new Notice(`Created note: ${filePath}`);
+          new Notice(`Created: ${filePath}`);
           return file;
         } catch (err: any) {
           new Notice(`Failed to create note: ${err.message}`);
@@ -113,8 +133,22 @@ export class StudioView extends ItemView {
         }
       },
 
-      // 4. Render lists with empty states
-      renderList: (selector: string, items: any[], templateFn: (item: any) => string, emptyHtml = "<div>No items found</div>") => {
+      // 4. Universal Frontmatter Updater (Interactive edits directly from the UI)
+      updateNote: async (path: string, updater: (frontmatter: Record<string, any>) => void): Promise<boolean> => {
+        const file = app.vault.getAbstractFileByPath(path);
+        if (file instanceof TFile) {
+          try {
+            await app.fileManager.processFrontMatter(file, updater);
+            return true;
+          } catch (err: any) {
+            new Notice(`Update error: ${err.message}`);
+          }
+        }
+        return false;
+      },
+
+      // 5. Universal List / Grid Renderer
+      renderList: (selector: string, items: any[], templateFn: (item: any) => string, emptyHtml = '<div class="cds-empty">No items found</div>') => {
         const target = containerEl.querySelector(selector);
         if (!target) return;
         if (!items || items.length === 0) {
@@ -124,22 +158,22 @@ export class StudioView extends ItemView {
         target.innerHTML = items.map(templateFn).join("");
       },
 
-      // 5. Declarative filter bar
-      bindFilter: (selector: string, categories: string[], onSelect: (category: string) => void) => {
+      // 6. Universal Filter / Tabs Controller
+      bindFilter: (selector: string, options: string[], onSelect: (selected: string) => void) => {
         const bar = containerEl.querySelector(selector);
         if (!bar) return;
         bar.innerHTML = "";
-        let active = categories[0] || "All";
+        let active = options[0] || "All";
 
-        categories.forEach(cat => {
+        options.forEach(opt => {
           const btn = document.createElement("button");
-          btn.className = `filter-btn ${cat === active ? "active" : ""}`;
-          btn.innerText = cat;
+          btn.className = `filter-btn ${opt === active ? "active" : ""}`;
+          btn.innerText = opt;
           btn.onclick = () => {
-            active = cat;
+            active = opt;
             bar.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
-            onSelect(cat);
+            onSelect(opt);
           };
           bar.appendChild(btn);
         });
@@ -1284,45 +1318,44 @@ saveBtn.onclick = async () => {
           "// --- HTML ---",
           `const htmlContent = \`${htmlCode}\`;`,
           '',
-          "// --- HELPERS ---",
+          "// --- UNIVERSAL HELPERS ---",
           'const container = this.container;',
           'container.innerHTML = htmlContent;',
           'const $ = (s) => container.querySelector(s);',
           'const $$ = (s) => container.querySelectorAll(s);',
           'const db = {',
           '  query: (src, def = []) => {',
-          '    const DEFAULT_COVER = "https://via.placeholder.com/150x225?text=No+Cover";',
           '    try {',
-          '      return (dv && dv.pages) ? dv.pages(src).map(p => ({',
-          '        ...p,',
-          '        title: p.title || p.file.name,',
-          '        author: p.author || "Unknown Author",',
-          '        status: p.status || "Plan to Read",',
-          '        cover: (p.cover && p.cover.trim() !== "") ? p.cover : DEFAULT_COVER,',
-          '        path: p.file.path',
-          '      })).values : def;',
-          '    } catch (e) { return def; }',
+          '      const p = (dv && dv.pages) ? dv.pages(src) : null;',
+          '      if (p && p.length > 0) return p.map(x => ({ ...x, path: x.file?.path || "#", name: x.file?.name || "", tags: x.file?.tags || [] })).values;',
+          '    } catch (e) {}',
+          '    return def;',
           '  },',
           '  openNote: (p) => { if (p && p !== "#") app.workspace.openLinkText(p, "", false); },',
           '  createNote: async (opt) => {',
-          '    let f = opt.folder || ""; let t = opt.title || "Untitled";',
+          '    let f = opt.folder ? opt.folder.replace(/^\\/+|\\/+$/g, "") : "";',
+          '    let n = opt.name || opt.frontmatter?.title || "Untitled";',
           '    if (f && !app.vault.getAbstractFileByPath(f)) await app.vault.createFolder(f);',
-          '    let path = f ? `${f}/${t}.md` : `${t}.md`; let c = 1;',
-          '    while (app.vault.getAbstractFileByPath(path)) { path = f ? `${f}/${t} ${c}.md` : `${t} ${c}.md`; c++; }',
+          '    let path = f ? `${f}/${n}.md` : `${n}.md`; let c = 1;',
+          '    while (app.vault.getAbstractFileByPath(path)) { path = f ? `${f}/${n} ${c}.md` : `${n} ${c}.md`; c++; }',
           '    let y = opt.frontmatter ? "---\\n" + Object.entries(opt.frontmatter).map(([k,v]) => `${k}: ${JSON.stringify(v)}`).join("\\n") + "\\n---\\n\\n" : "";',
-          '    let file = await app.vault.create(path, y + `# ${t}\\n\\n`);',
+          '    let file = await app.vault.create(path, y + (opt.content || `# ${n}\\n\\n`));',
           '    if (opt.open !== false) await app.workspace.getLeaf().openFile(file);',
           '    return file;',
           '  },',
-          '  renderList: (sel, items, fn, empty = "<div>Empty</div>") => {',
+          '  updateNote: async (p, fn) => {',
+          '    const f = app.vault.getAbstractFileByPath(p);',
+          '    if (f instanceof TFile) await app.fileManager.processFrontMatter(f, fn);',
+          '  },',
+          '  renderList: (sel, items, fn, empty = "<div>No items found</div>") => {',
           '    const el = $(sel); if (!el) return;',
           '    el.innerHTML = (items && items.length) ? items.map(fn).join("") : empty;',
           '  },',
-          '  bindFilter: (sel, cats, onSel) => {',
-          '    const bar = $(sel); if (!bar) return; bar.innerHTML = ""; let act = cats[0];',
-          '    cats.forEach(c => {',
-          '      const b = document.createElement("button"); b.className = `filter-btn ${c === act ? "active" : ""}`; b.innerText = c;',
-          '      b.onclick = () => { act = c; bar.querySelectorAll(".filter-btn").forEach(x => x.classList.remove("active")); b.classList.add("active"); onSel(c); };',
+          '  bindFilter: (sel, opts, onSel) => {',
+          '    const bar = $(sel); if (!bar) return; bar.innerHTML = ""; let act = opts[0] || "All";',
+          '    opts.forEach(o => {',
+          '      const b = document.createElement("button"); b.className = `filter-btn ${o === act ? "active" : ""}`; b.innerText = o;',
+          '      b.onclick = () => { act = o; bar.querySelectorAll(".filter-btn").forEach(x => x.classList.remove("active")); b.classList.add("active"); onSel(o); };',
           '      bar.appendChild(b);',
           '    });',
           '    onSel(act);',
