@@ -759,6 +759,35 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     versionSelect.createEl('option', { text: '-- Select Version --', attr: { value: '', disabled: true } });
 
     const newVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: '+ Save as New' });
+    newVersionBtn.style.display = 'none'; // Hidden by default
+
+    // Checks if editor code differs from the currently selected version snapshot
+    const checkUnsavedChanges = () => {
+      if (!this.currentFile) {
+        newVersionBtn.style.display = 'none';
+        return;
+      }
+      const versions = this.plugin.data.versions[this.currentFile.path] || [];
+      const idx = parseInt(versionSelect.value, 10);
+      
+      if (isNaN(idx) || !versions[idx]) {
+        newVersionBtn.style.display = 'none';
+        return;
+      }
+
+      const resolved = this.resolveVersion(versions, idx);
+      const hasChanges = (htmlCode !== resolved.html) || 
+                         (cssCode !== resolved.css) || 
+                         (jsCode !== resolved.js);
+
+      if (hasChanges) {
+        newVersionBtn.style.display = 'inline-flex';
+        newVersionBtn.addClass('cds-btn-highlight');
+      } else {
+        newVersionBtn.style.display = 'none';
+        newVersionBtn.removeClass('cds-btn-highlight');
+      }
+    };
     const renameVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Rename Ver' });
     const removeVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Remove Last Ver' });
     const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Update Note', attr: { style: 'margin-left: auto;' } });
@@ -797,9 +826,23 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       debounceTimer = setTimeout(() => runCode(), 250);
     };
 
-    const htmlEditor = this.createCodeEditor(htmlPane, 'html', htmlCode, (val) => { htmlCode = val; triggerHotReload(); }, () => htmlCode);
-    const cssEditor = this.createCodeEditor(cssPane, 'css', cssCode, (val) => { cssCode = val; triggerHotReload(); }, () => htmlCode);
-    const jsEditor = this.createCodeEditor(jsPane, 'js', jsCode, (val) => { jsCode = val; triggerHotReload(); }, () => htmlCode);
+    const htmlEditor = this.createCodeEditor(htmlPane, 'html', htmlCode, (val) => { 
+      htmlCode = val; 
+      triggerHotReload(); 
+      checkUnsavedChanges(); 
+    }, () => htmlCode);
+
+    const cssEditor = this.createCodeEditor(cssPane, 'css', cssCode, (val) => { 
+      cssCode = val; 
+      triggerHotReload(); 
+      checkUnsavedChanges(); 
+    }, () => htmlCode);
+
+    const jsEditor = this.createCodeEditor(jsPane, 'js', jsCode, (val) => { 
+      jsCode = val; 
+      triggerHotReload(); 
+      checkUnsavedChanges(); 
+    }, () => htmlCode);
 
     // Column 2: Live Preview (Starts at the exact same top height as the editor)
     const previewWrapper = mainBody.createDiv({ cls: 'cds-preview-pane' });
@@ -939,6 +982,7 @@ styleEl.innerHTML = `
         updateVersionDropdown(file.path, latestTag);
         new Notice(`Loaded note: ${file.name}`);
         runCode();
+        checkUnsavedChanges();
       }
     };
 
@@ -957,6 +1001,7 @@ styleEl.innerHTML = `
         jsEditor.setValue(jsCode);
         new Notice(`Loaded version: ${selectedVersion.tag}`);
         runCode();
+        checkUnsavedChanges();
       }
     };
 
@@ -987,6 +1032,7 @@ styleEl.innerHTML = `
 
         this.plugin.data.versions[path]!.push(newSnapshot);
         await this.plugin.saveStudioData();
+        checkUnsavedChanges(); // Hides button because changes are now saved to the new version
 
         updateVersionDropdown(path, tag);
         new Notice(`Created delta version ${tag}`);
