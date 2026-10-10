@@ -321,15 +321,15 @@ export class StudioView extends ItemView {
   }
 
 /**
-   * Robust code highlighter that safely escapes all text
-   * and highlights keywords, properties, methods, strings, and tags.
+   * Pixel-perfect code highlighter.
+   * Guarantees 100% escaping so template strings with HTML never warp line height.
    */
   highlightCode(code: string, mode: 'html' | 'css' | 'js'): string {
     const escape = (str: string) => 
       str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     if (mode === 'html') {
-      return code.replace(/(<!--[\s\S]*?-->)|(<\/?[a-zA-Z0-9-]+)|([\w:-]+)(=)("[^"]*"|'[^']*')|(>|\/>)|([^<]+)/g, 
+      return code.replace(/(<!--[\s\S]*?-->)|(<\/?[a-zA-Z0-9-]+)|([\w:-]+)(=)("[^"]*"|'[^']*')|(>|\/>)|([^<]+|.)/g, 
         (_m, comment, tag, attr, eq, val, close, text) => {
           if (comment) return `<span class="cds-tok-comment">${escape(comment)}</span>`;
           if (tag) return `<span class="cds-tok-tag">${escape(tag)}</span>`;
@@ -342,8 +342,8 @@ export class StudioView extends ItemView {
     }
 
     if (mode === 'css') {
-      return code.replace(/(\/\*[\s\S]*?\*\/)|([.#][\w-]+)|([a-zA-Z-]+)\s*(:)|("[^"]*"|'[^']*')|([0-9.]+(?:px|rem|em|%|vh|vw|s|ms)?)|(var\(--[\w-]+\))|(\b(?:rgba?|hsla?|calc|minmax|repeat|url)\b)/g,
-        (_m, comment, selector, prop, colon, str, num, cssVar, fn) => {
+      return code.replace(/(\/\*[\s\S]*?\*\/)|([.#][\w-]+)|([a-zA-Z-]+)\s*(:)|("[^"]*"|'[^']*')|([0-9.]+(?:px|rem|em|%|vh|vw|s|ms)?)|(var\(--[\w-]+\))|(\b(?:rgba?|hsla?|calc|minmax|repeat|url)\b)|([^"'/`a-zA-Z0-9_\s]+|[a-zA-Z0-9_\s]+|.)/g,
+        (_m, comment, selector, prop, colon, str, num, cssVar, fn, text) => {
           if (comment) return `<span class="cds-tok-comment">${escape(comment)}</span>`;
           if (selector) return `<span class="cds-tok-tag">${escape(selector)}</span>`;
           if (prop) return `<span class="cds-tok-prop">${escape(prop)}</span>${colon}`;
@@ -351,14 +351,15 @@ export class StudioView extends ItemView {
           if (num) return `<span class="cds-tok-num">${escape(num)}</span>`;
           if (cssVar) return `<span class="cds-tok-var">${escape(cssVar)}</span>`;
           if (fn) return `<span class="cds-tok-builtin">${escape(fn)}</span>`;
+          if (text) return escape(text);
           return escape(_m);
         }
       );
     }
 
-    // JS mode
-    return code.replace(/(\/\/.*|\/\*[\s\S]*?\*\/)|("[^"]*"|'[^']*'|`[\s\S]*?`)|(\b(?:const|let|var|function|return|if|else|for|while|import|export|class|new|async|await|try|catch|switch|case|break)\b)|(\b(?:true|false|null|undefined)\b)|(\b(?:dv|app|container|window|document|console)\b)|(\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)(?=\s*\()|(\b\d+\b)/g,
-      (_m, comment, str, kw, bool, builtin, method, num) => {
+    // JS mode: Strictly matches multiline backtick template literals and escapes everything else
+    return code.replace(/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(`(?:\\`|[\s\S])*?`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b(?:const|let|var|function|return|if|else|for|while|import|export|class|new|async|await|try|catch|switch|case|break)\b)|(\b(?:true|false|null|undefined)\b)|(\b(?:dv|app|container|window|document|console|db|\$|\$\$)\b)|(\b[a-zA-Z_$][a-zA-Z0-9_$]*\b)(?=\s*\()|(\b\d+\b)|([^"'/`a-zA-Z0-9_\s]+|[a-zA-Z0-9_\s]+|.)/g,
+      (_m, comment, str, kw, bool, builtin, method, num, text) => {
         if (comment) return `<span class="cds-tok-comment">${escape(comment)}</span>`;
         if (str) return `<span class="cds-tok-str">${escape(str)}</span>`;
         if (kw) return `<span class="cds-tok-kw">${escape(kw)}</span>`;
@@ -366,6 +367,7 @@ export class StudioView extends ItemView {
         if (builtin) return `<span class="cds-tok-builtin">${escape(builtin)}</span>`;
         if (method) return `<span class="cds-tok-prop">${escape(method)}</span>`;
         if (num) return `<span class="cds-tok-num">${escape(num)}</span>`;
+        if (text) return escape(text);
         return escape(_m);
       }
     );
@@ -463,7 +465,8 @@ export class StudioView extends ItemView {
     const textarea = editArea.createEl('textarea', { cls: 'cds-textarea-layer' });
     textarea.value = initialCode;
 
-    // Turn off browser spellcheck and grammar underlines
+    // Turn off browser spellcheck, grammar, and force no-wrap
+    textarea.setAttribute('wrap', 'off'); // <-- CRITICAL: Stops soft-wrapping desync
     textarea.setAttribute('spellcheck', 'false');
     textarea.setAttribute('autocapitalize', 'off');
     textarea.setAttribute('autocomplete', 'off');
@@ -487,6 +490,14 @@ export class StudioView extends ItemView {
     let activeIndex = 0;
     let filteredList: AutocompleteSuggestion[] = [];
     let replaceStartPos = 0;
+
+    // Hardware-accelerated GPU scroll sync (Zero clamping, zero drift)
+    const syncScroll = () => {
+      highlightCodeEl.style.transform = `translate3d(-${textarea.scrollLeft}px, -${textarea.scrollTop}px, 0)`;
+      gutter.scrollTop = textarea.scrollTop;
+    };
+
+    textarea.addEventListener('scroll', syncScroll);
 
     const renderGutterAndHighlight = () => {
       const val = textarea.value;
@@ -512,15 +523,11 @@ export class StudioView extends ItemView {
       });
 
       // Syntax highlight
-      highlightCodeEl.innerHTML = this.highlightCode(val + '\n', mode);
+      highlightCodeEl.innerHTML = this.highlightCode(val, mode) + (val.endsWith('\n') ? ' ' : '');
+      syncScroll();
     };
 
-    // Scroll synchronizer
-    textarea.addEventListener('scroll', () => {
-      highlightPre.scrollTop = textarea.scrollTop;
-      highlightPre.scrollLeft = textarea.scrollLeft;
-      gutter.scrollTop = textarea.scrollTop;
-    });
+
 
     const hideDropdown = () => {
       dropdown.style.display = 'none';
@@ -575,8 +582,8 @@ export class StudioView extends ItemView {
 
       div.style.position = 'absolute';
       div.style.visibility = 'hidden';
-      div.style.whiteSpace = 'pre-wrap';
-      div.style.wordWrap = 'break-word';
+      div.style.whiteSpace = 'pre';
+      div.style.wordWrap = 'normal';
       document.body.appendChild(div);
 
       div.textContent = textarea.value.substring(0, pos);
@@ -931,58 +938,68 @@ export class StudioView extends ItemView {
   width: 100%; 
   overflow: hidden; 
   background: #1b2230 !important; 
-  color: #e2e8f0 !important; /* Base text color for everything */
+  color: #e2e8f0 !important;
 }
 
-/* Pre Layer Resets */
+/* Pre Viewport Frame */
 pre.cds-highlight-layer {
-  all: unset !important;
   position: absolute !important;
-  top: 0 !important; left: 0 !important;
-  width: 100% !important; height: 100% !important;
-  margin: 0 !important; padding: 8px 10px !important;
+  top: 0 !important; 
+  left: 0 !important;
+  width: 100% !important; 
+  height: 100% !important;
+  margin: 0 !important; 
+  padding: 0 !important;
   box-sizing: border-box !important;
-  font-family: var(--font-monospace) !important;
-  font-size: 13px !important;
-  line-height: 20px !important;
-  letter-spacing: normal !important;
-  white-space: pre !important;
-  word-wrap: normal !important;
   overflow: hidden !important;
   pointer-events: none !important;
   user-select: none !important;
   background: transparent !important;
   border: none !important;
   z-index: 1 !important;
-  tab-size: 2 !important;
-  color: #e2e8f0 !important; /* Guarantees non-token text is bright off-white */
 }
 
+/* Transformed Code Layer (Moves 1:1 with scroll) */
 pre.cds-highlight-layer code {
-  all: unset !important;
-  font-family: inherit !important;
-  font-size: inherit !important;
-  line-height: inherit !important;
-  white-space: pre !important;
+  display: block !important;
+  min-height: 100% !important;
   background: transparent !important;
   border: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  display: inline !important;
-  color: #e2e8f0 !important; /* Guarantees plain text like 'Add Book' is visible */
+  border-radius: 0 !important;
+  margin: 0 !important; 
+  padding: 8px 10px 40px 10px !important;
+  box-sizing: border-box !important;
+  font: 13px/20px var(--font-monospace) !important;
+  font-family: var(--font-monospace) !important;
+  font-size: 13px !important;
+  line-height: 20px !important;
+  letter-spacing: 0px !important;
+  word-spacing: 0px !important;
+  font-variant-ligatures: none !important;
+  white-space: pre !important;
+  word-wrap: normal !important;
+  tab-size: 2 !important;
+  color: #e2e8f0 !important;
+  will-change: transform;
 }
 
 /* Typing Layer */
 textarea.cds-textarea-layer {
   position: absolute !important;
-  top: 0 !important; left: 0 !important;
-  width: 100% !important; height: 100% !important;
-  margin: 0 !important; padding: 8px 10px !important;
+  top: 0 !important; 
+  left: 0 !important;
+  width: 100% !important; 
+  height: 100% !important;
+  margin: 0 !important; 
+  padding: 8px 10px 40px 10px !important; /* Exact same padding as code */
   box-sizing: border-box !important;
+  font: 13px/20px var(--font-monospace) !important;
   font-family: var(--font-monospace) !important;
   font-size: 13px !important;
   line-height: 20px !important;
-  letter-spacing: normal !important;
+  letter-spacing: 0px !important;
+  word-spacing: 0px !important;
+  font-variant-ligatures: none !important;
   white-space: pre !important;
   word-wrap: normal !important;
   overflow: auto !important;
@@ -995,6 +1012,7 @@ textarea.cds-textarea-layer {
   z-index: 2 !important;
   tab-size: 2 !important;
 }
+
 textarea.cds-textarea-layer::selection {
   background: rgba(96, 165, 250, 0.35) !important;
   color: transparent !important;
