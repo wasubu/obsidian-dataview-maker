@@ -1122,7 +1122,7 @@ textarea.cds-textarea-layer::selection {
 
           const jsSplit = code.split('// --- JS ---');
           if (jsSplit[1]) {
-            jsCode = jsSplit[1].replace(/^\s*const\s+container\s*=\s*this\.container;\s*/, '').trim();
+            jsCode = jsSplit[1].trim();
           } else {
             jsCode = code.trim();
           }
@@ -1263,7 +1263,7 @@ textarea.cds-textarea-layer::selection {
       ).open();
     };
 
-    saveBtn.onclick = async () => {
+saveBtn.onclick = async () => {
       if (!this.currentFile) {
         new Notice("Please select and load a vault note first!");
         return;
@@ -1284,8 +1284,53 @@ textarea.cds-textarea-layer::selection {
           "// --- HTML ---",
           `const htmlContent = \`${htmlCode}\`;`,
           '',
-          "// --- JS ---",
+          "// --- HELPERS ---",
           'const container = this.container;',
+          'container.innerHTML = htmlContent;',
+          'const $ = (s) => container.querySelector(s);',
+          'const $$ = (s) => container.querySelectorAll(s);',
+          'const db = {',
+          '  query: (src, def = []) => {',
+          '    const DEFAULT_COVER = "https://via.placeholder.com/150x225?text=No+Cover";',
+          '    try {',
+          '      return (dv && dv.pages) ? dv.pages(src).map(p => ({',
+          '        ...p,',
+          '        title: p.title || p.file.name,',
+          '        author: p.author || "Unknown Author",',
+          '        status: p.status || "Plan to Read",',
+          '        cover: (p.cover && p.cover.trim() !== "") ? p.cover : DEFAULT_COVER,',
+          '        path: p.file.path',
+          '      })).values : def;',
+          '    } catch (e) { return def; }',
+          '  },',
+          '  openNote: (p) => { if (p && p !== "#") app.workspace.openLinkText(p, "", false); },',
+          '  createNote: async (opt) => {',
+          '    let f = opt.folder || ""; let t = opt.title || "Untitled";',
+          '    if (f && !app.vault.getAbstractFileByPath(f)) await app.vault.createFolder(f);',
+          '    let path = f ? `${f}/${t}.md` : `${t}.md`; let c = 1;',
+          '    while (app.vault.getAbstractFileByPath(path)) { path = f ? `${f}/${t} ${c}.md` : `${t} ${c}.md`; c++; }',
+          '    let y = opt.frontmatter ? "---\\n" + Object.entries(opt.frontmatter).map(([k,v]) => `${k}: ${JSON.stringify(v)}`).join("\\n") + "\\n---\\n\\n" : "";',
+          '    let file = await app.vault.create(path, y + `# ${t}\\n\\n`);',
+          '    if (opt.open !== false) await app.workspace.getLeaf().openFile(file);',
+          '    return file;',
+          '  },',
+          '  renderList: (sel, items, fn, empty = "<div>Empty</div>") => {',
+          '    const el = $(sel); if (!el) return;',
+          '    el.innerHTML = (items && items.length) ? items.map(fn).join("") : empty;',
+          '  },',
+          '  bindFilter: (sel, cats, onSel) => {',
+          '    const bar = $(sel); if (!bar) return; bar.innerHTML = ""; let act = cats[0];',
+          '    cats.forEach(c => {',
+          '      const b = document.createElement("button"); b.className = `filter-btn ${c === act ? "active" : ""}`; b.innerText = c;',
+          '      b.onclick = () => { act = c; bar.querySelectorAll(".filter-btn").forEach(x => x.classList.remove("active")); b.classList.add("active"); onSel(c); };',
+          '      bar.appendChild(b);',
+          '    });',
+          '    onSel(act);',
+          '  }',
+          '};',
+          'window.db = db;',
+          '',
+          "// --- JS ---",
           jsCode,
           "```"
         ].join('\n');
