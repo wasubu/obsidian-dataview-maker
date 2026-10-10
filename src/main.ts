@@ -55,7 +55,8 @@ class StudioView extends ItemView {
       style.innerHTML = `
         .cds-studio-root { display: flex; flex-direction: column; height: 100%; gap: 12px; padding: 16px; box-sizing: border-box; }
         .cds-toolbar { display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 10px; flex-wrap: wrap; }
-        .cds-select { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); color: var(--text-normal); padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; flex-grow: 1; max-width: 300px; }
+        .cds-select { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); color: var(--text-normal); padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; flex-grow: 1; max-width: 350px; outline: none; }
+        .cds-select:focus { border-color: var(--interactive-accent); }
         .cds-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; }
         .cds-tab-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 6px 14px; border-radius: 4px; cursor: pointer; color: var(--text-normal); font-weight: 500; }
         .cds-tab-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }
@@ -79,12 +80,11 @@ class StudioView extends ItemView {
 
     // Top Toolbar
     const toolbar = container.createDiv({ cls: 'cds-toolbar' });
-    toolbar.createEl('span', { text: 'Note:', attr: { style: 'font-weight:600; font-size:0.85rem;' } });
+    toolbar.createEl('span', { text: 'Target Note:', attr: { style: 'font-weight:600; font-size:0.85rem;' } });
     
     const fileSelect = toolbar.createEl('select', { cls: 'cds-select' });
     fileSelect.createEl('option', { text: 'Scanning notes...', attr: { value: '', disabled: true } });
 
-    const loadBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Load' });
     const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Save to Note' });
 
     // Populate dropdown asynchronously with only files containing dataviewjs
@@ -99,7 +99,7 @@ class StudioView extends ItemView {
             fileSelect.createEl('option', { text: file.path, attr: { value: file.path } });
           }
         } catch (e) {
-          // Skip files that fail to read
+          // Skip unreadable files
         }
       }
     })();
@@ -109,8 +109,6 @@ class StudioView extends ItemView {
     const htmlBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn active', text: 'HTML' });
     const cssBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'CSS' });
     const jsBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'JS Logic' });
-    const runBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: '▶ Run / Preview' });
-    runBtn.style.marginLeft = 'auto';
 
     // Split Container for Editors
     const splitContainer = container.createDiv({ cls: 'cds-split' });
@@ -169,11 +167,11 @@ class StudioView extends ItemView {
     cssArea.oninput = (e: any) => { cssCode = e.target.value; triggerHotReload(); };
     jsArea.oninput = (e: any) => { jsCode = e.target.value; triggerHotReload(); };
 
-    // Load from Vault File
-    loadBtn.onclick = async () => {
+    // Auto-load note when selected from dropdown
+    fileSelect.onchange = async () => {
       const selectedPath = fileSelect.value;
       if (!selectedPath) {
-        new Notice("Please select a note first.");
+        this.currentFile = null;
         return;
       }
       const file = this.app.vault.getAbstractFileByPath(selectedPath);
@@ -190,6 +188,9 @@ class StudioView extends ItemView {
           if (cssMatch && cssMatch[1]) {
             cssCode = cssMatch[1];
             cssArea.value = cssCode;
+          } else {
+            cssCode = "";
+            cssArea.value = "";
           }
 
           // 2. Extract HTML
@@ -197,6 +198,9 @@ class StudioView extends ItemView {
           if (htmlMatch && htmlMatch[1]) {
             htmlCode = htmlMatch[1];
             htmlArea.value = htmlCode;
+          } else {
+            htmlCode = "";
+            htmlArea.value = "";
           }
 
           // 3. Extract JS Logic
@@ -214,7 +218,7 @@ class StudioView extends ItemView {
           jsArea.value = jsCode;
         }
 
-        new Notice(`Loaded note: ${file.name}`);
+        new Notice(`Loaded: ${file.name}`);
         runCode();
       }
     };
@@ -222,7 +226,7 @@ class StudioView extends ItemView {
     // Save back to Vault Note
     saveBtn.onclick = async () => {
       if (!this.currentFile) {
-        new Notice("Please select and load a vault note first!");
+        new Notice("Please select a note from the dropdown first!");
         return;
       }
       try {
@@ -265,7 +269,6 @@ class StudioView extends ItemView {
     htmlBtn.onclick = () => switchTab('html');
     cssBtn.onclick = () => switchTab('css');
     jsBtn.onclick = () => switchTab('js');
-    runBtn.onclick = () => runCode();
 
     runCode();
   }
