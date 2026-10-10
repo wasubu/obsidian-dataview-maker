@@ -728,9 +728,29 @@ export class StudioView extends ItemView {
       });
 
       const coords = computeCaretPosition(pos);
-      dropdown.style.top = `${coords.top + 20}px`;
-      dropdown.style.left = `${Math.min(coords.left, Math.max(0, textarea.clientWidth - 295))}px`;
       dropdown.style.display = 'block';
+
+      // Smart Viewport Collision Detection
+      const editorHeight = editArea.clientHeight;
+      const editorWidth = editArea.clientWidth;
+      const menuHeight = dropdown.offsetHeight || 200;
+      const menuWidth = 290;
+
+      let topPos = coords.top + 22; // Default: appear below the cursor
+
+      // If it overflows the bottom AND there is room above, flip it ABOVE the cursor
+      if (topPos + menuHeight > editorHeight && coords.top - menuHeight > 0) {
+        topPos = coords.top - menuHeight - 6;
+      }
+
+      // Hard clamp: Never let it escape the top or bottom of the editor pane
+      topPos = Math.max(4, Math.min(topPos, Math.max(4, editorHeight - menuHeight - 6)));
+
+      // Horizontal clamp: Keep within left and right boundaries
+      const leftPos = Math.max(4, Math.min(coords.left, Math.max(4, editorWidth - menuWidth - 8)));
+
+      dropdown.style.top = `${topPos}px`;
+      dropdown.style.left = `${leftPos}px`;
       updateSelectionHighlight();
     });
 
