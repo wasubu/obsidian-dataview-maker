@@ -366,7 +366,18 @@ export class StudioView extends ItemView {
       const insertText = item.text;
 
       textarea.value = text.substring(0, replaceStartPos) + insertText + text.substring(currentPos);
-      const newCursorPos = replaceStartPos + insertText.length;
+      
+      let newCursorPos = replaceStartPos + insertText.length;
+
+      // 1. If method ends with (), place cursor inside: console.log(|)
+      if (insertText.endsWith('()')) {
+        newCursorPos -= 1;
+      }
+      // 2. If HTML attribute ends with ="", place cursor inside: class="|"
+      else if (insertText.endsWith('=""')) {
+        newCursorPos -= 1;
+      }
+
       textarea.setSelectionRange(newCursorPos, newCursorPos);
 
       hideDropdown();
@@ -517,23 +528,25 @@ export class StudioView extends ItemView {
       updateSelectionHighlight();
     }));
 
-    textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+
+      // =========================================================================
+      // 1. Autocomplete Menu Navigation
+      // =========================================================================
       if (dropdown.style.display === 'block') {
-        // Tab / Shift+Tab Cycling
         if (e.key === 'Tab') {
           e.preventDefault();
           if (e.shiftKey) {
-            // Shift + Tab: Cycle backward
-            activeIndex = (activeIndex - 1 + filteredList.length) % filteredList.length;
+            activeIndex = (activeIndex - 1 + filteredList.length) % filteredList.length; // Shift+Tab: Backward
           } else {
-            // Tab: Cycle forward
-            activeIndex = (activeIndex + 1) % filteredList.length;
+            activeIndex = (activeIndex + 1) % filteredList.length; // Tab: Forward
           }
           updateSelectionHighlight();
           return;
         }
 
-        // Arrow Key Navigation
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           activeIndex = (activeIndex + 1) % filteredList.length;
@@ -547,7 +560,6 @@ export class StudioView extends ItemView {
           return;
         }
 
-        // Enter to Complete
         if (e.key === 'Enter') {
           const selectedItem = filteredList[activeIndex];
           if (selectedItem) {
@@ -563,11 +575,11 @@ export class StudioView extends ItemView {
         }
       }
 
-      // Normal Tab indentation when popup is not open
+      // =========================================================================
+      // 2. Tab 2-Space Indentation (When menu is closed)
+      // =========================================================================
       if (e.key === 'Tab' && dropdown.style.display !== 'block') {
         e.preventDefault();
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
         textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
         textarea.setSelectionRange(start + 2, start + 2);
         renderGutterAndHighlight();
@@ -575,17 +587,56 @@ export class StudioView extends ItemView {
         return;
       }
 
-      // Auto-closing brackets and quotes
+      // =========================================================================
+      // 3. Skip Over Existing Closing Character (Overtyping ", ', `, ), ], })
+      // =========================================================================
+      const closers = new Set(['"', "'", '`', ')', ']', '}']);
+      if (start === end && closers.has(e.key) && textarea.value.charAt(start) === e.key) {
+        e.preventDefault();
+        textarea.setSelectionRange(start + 1, start + 1); // Jump right outside
+        return;
+      }
+
+      // =========================================================================
+      // 4. Backspace Pair Deletion (Deletes both if cursor is between {})
+      // =========================================================================
+      if (e.key === 'Backspace' && start === end && start > 0) {
+        const charBefore = textarea.value.charAt(start - 1);
+        const charAfter = textarea.value.charAt(start);
+
+        const pairMap: Record<string, string> = {
+          '{': '}',
+          '[': ']',
+          '(': ')',
+          '"': '"',
+          "'": "'",
+          '`': '`'
+        };
+
+        if (pairMap[charBefore] && pairMap[charBefore] === charAfter) {
+          e.preventDefault();
+          // Delete both opening and closing character
+          textarea.value = textarea.value.substring(0, start - 1) + textarea.value.substring(start + 1);
+          textarea.setSelectionRange(start - 1, start - 1);
+          renderGutterAndHighlight();
+          onChange(textarea.value);
+          return;
+        }
+      }
+
+      // =========================================================================
+      // 5. Auto-Closing Pairs Insertion
+      // =========================================================================
       const pairs: Record<string, string> = { '"': '"', "'": "'", '(': ')', '{': '}', '[': ']', '`': '`' };
       if (pairs[e.key]) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
         e.preventDefault();
         if (start !== end) {
+          // Wrap selected text: (selected) or "selected"
           const selected = textarea.value.substring(start, end);
           textarea.value = textarea.value.substring(0, start) + e.key + selected + pairs[e.key] + textarea.value.substring(end);
           textarea.setSelectionRange(start + 1, end + 1);
         } else {
+          // Insert pair and place cursor between: {|}
           textarea.value = textarea.value.substring(0, start) + e.key + pairs[e.key] + textarea.value.substring(end);
           textarea.setSelectionRange(start + 1, start + 1);
         }
