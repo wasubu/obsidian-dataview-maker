@@ -82,14 +82,27 @@ class StudioView extends ItemView {
     toolbar.createEl('span', { text: 'Note:', attr: { style: 'font-weight:600; font-size:0.85rem;' } });
     
     const fileSelect = toolbar.createEl('select', { cls: 'cds-select' });
-    fileSelect.createEl('option', { text: '-- Select Vault Note --', attr: { value: '' } });
-    
-    this.app.vault.getMarkdownFiles().forEach(file => {
-      fileSelect.createEl('option', { text: file.path, attr: { value: file.path } });
-    });
+    fileSelect.createEl('option', { text: 'Scanning notes...', attr: { value: '', disabled: true } });
 
     const loadBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Load' });
     const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Save to Note' });
+
+    // Populate dropdown asynchronously with only files containing dataviewjs
+    (async () => {
+      fileSelect.empty();
+      fileSelect.createEl('option', { text: '-- Select DataviewJS Note --', attr: { value: '' } });
+      const markdownFiles = this.app.vault.getMarkdownFiles();
+      for (const file of markdownFiles) {
+        try {
+          const content = await this.app.vault.cachedRead(file);
+          if (content.includes('dataviewjs')) {
+            fileSelect.createEl('option', { text: file.path, attr: { value: file.path } });
+          }
+        } catch (e) {
+          // Skip files that fail to read
+        }
+      }
+    })();
 
     // 3 Tabs Header (HTML, CSS, JS Logic)
     const tabHeader = container.createDiv({ cls: 'cds-tabs' });
@@ -149,14 +162,14 @@ class StudioView extends ItemView {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         runCode();
-      }, 250); // Re-renders preview 250ms after you stop typing
+      }, 250);
     };
 
     htmlArea.oninput = (e: any) => { htmlCode = e.target.value; triggerHotReload(); };
     cssArea.oninput = (e: any) => { cssCode = e.target.value; triggerHotReload(); };
     jsArea.oninput = (e: any) => { jsCode = e.target.value; triggerHotReload(); };
 
-	// Load from Vault File (Parses CSS, HTML, and JS back into their respective tabs)
+    // Load from Vault File
     loadBtn.onclick = async () => {
       const selectedPath = fileSelect.value;
       if (!selectedPath) {
@@ -172,44 +185,41 @@ class StudioView extends ItemView {
         if (match && match[1]) {
           const code = match[1];
 
-          // 1. Extract CSS from style.innerHTML = `...`
+          // 1. Extract CSS
           const cssMatch = code.match(/style\.innerHTML\s*=\s*`([\s\S]*?)`;/);
           if (cssMatch && cssMatch[1]) {
             cssCode = cssMatch[1];
             cssArea.value = cssCode;
           }
 
-          // 2. Extract HTML from const htmlContent = `...`
+          // 2. Extract HTML
           const htmlMatch = code.match(/const\s+htmlContent\s*=\s*`([\s\S]*?)`;/);
           if (htmlMatch && htmlMatch[1]) {
             htmlCode = htmlMatch[1];
             htmlArea.value = htmlCode;
           }
 
-          // 3. Extract JS logic (everything after // --- JS ---)
+          // 3. Extract JS Logic
           const jsSplit = code.split('// --- JS ---');
           if (jsSplit[1]) {
-            // Remove 'const container = this.container;' if present at the top
             let cleanJs = jsSplit[1].replace(/^\s*const\s+container\s*=\s*this\.container;\s*/, '').trim();
             jsCode = cleanJs;
             jsArea.value = jsCode;
           } else {
-            // Fallback if it's a plain dataviewjs script without section comments
             jsCode = code.trim();
             jsArea.value = jsCode;
           }
         } else {
-          // Fallback if not wrapped in dataviewjs
           jsCode = content;
           jsArea.value = jsCode;
         }
 
-        new Notice(`Successfully loaded: ${file.name}`);
+        new Notice(`Loaded note: ${file.name}`);
         runCode();
       }
     };
 
-    // Save back to Vault Note with HTML, CSS, and JS combined
+    // Save back to Vault Note
     saveBtn.onclick = async () => {
       if (!this.currentFile) {
         new Notice("Please select and load a vault note first!");
