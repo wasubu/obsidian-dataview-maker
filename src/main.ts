@@ -60,19 +60,20 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
 
 class VersionPromptModal extends Modal {
   onSubmit: (result: string) => void;
+  defaultText: string;
 
-  constructor(app: App, defaultName: string, onSubmit: (result: string) => void) {
+  constructor(app: App, title: string, defaultText: string, onSubmit: (result: string) => void) {
     super(app);
     this.onSubmit = onSubmit;
-    this.titleEl.textContent = "Create New Version Snapshot"; // <--- Updated here
+    this.defaultText = defaultText;
+    this.titleEl.textContent = title;
   }
-  // ... rest of the modal class
 
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl('p', { text: 'Enter a name/description for this version update:' });
+    contentEl.createEl('p', { text: 'Enter version description/name:' });
     
-    const input = contentEl.createEl('input', { attr: { type: 'text', placeholder: 'e.g. Added search filter' } });
+    const input = contentEl.createEl('input', { attr: { type: 'text', value: this.defaultText } });
     input.style.width = '100%';
     input.style.marginBottom = '16px';
     input.style.padding = '8px';
@@ -83,10 +84,11 @@ class VersionPromptModal extends Modal {
     input.style.outline = 'none';
 
     input.focus();
+    input.select();
 
     const btnContainer = contentEl.createDiv({ attr: { style: 'display: flex; justify-content: flex-end; gap: 8px;' } });
     const cancelBtn = btnContainer.createEl('button', { text: 'Cancel', attr: { class: 'cds-tab-btn' } });
-    const submitBtn = btnContainer.createEl('button', { text: 'Create Version', attr: { class: 'cds-save-btn' } });
+    const submitBtn = btnContainer.createEl('button', { text: 'Confirm', attr: { class: 'cds-save-btn' } });
     submitBtn.style.marginLeft = '0';
 
     cancelBtn.onclick = () => this.close();
@@ -100,6 +102,37 @@ class VersionPromptModal extends Modal {
         this.onSubmit(input.value.trim() || 'Update');
         this.close();
       }
+    };
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+class ConfirmModal extends Modal {
+  onConfirm: () => void;
+  message: string;
+
+  constructor(app: App, title: string, message: string, onConfirm: () => void) {
+    super(app);
+    this.titleEl.textContent = title;
+    this.message = message;
+    this.onConfirm = onConfirm;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl('p', { text: this.message });
+    
+    const btnContainer = contentEl.createDiv({ attr: { style: 'display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;' } });
+    const cancelBtn = btnContainer.createEl('button', { text: 'Cancel', attr: { class: 'cds-tab-btn' } });
+    const confirmBtn = btnContainer.createEl('button', { text: 'Delete', attr: { class: 'cds-save-btn', style: 'background: var(--text-error); color: white;' } });
+
+    cancelBtn.onclick = () => this.close();
+    confirmBtn.onclick = () => {
+      this.onConfirm();
+      this.close();
     };
   }
 
@@ -164,7 +197,9 @@ class StudioView extends ItemView {
     const versionSelect = toolbar.createEl('select', { cls: 'cds-select' });
     versionSelect.createEl('option', { text: '-- Select Version --', attr: { value: '', disabled: true } });
 
-    const newVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: '+ New Version' });
+    const newVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: '+ Save as New' });
+    const renameVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Rename' });
+    const removeVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: '🗑️ Remove Last' });
     const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Save to Note', attr: { style: 'margin-left: auto;' } });
 
     // Populate Note Dropdown
@@ -299,7 +334,7 @@ class StudioView extends ItemView {
           jsArea.value = jsCode;
         }
 
-		// Initialize v0 version if none exist for this file yet
+        // Initialize v0 version if none exist for this file yet
         if (!this.plugin.data.versions[file.path]) {
           this.plugin.data.versions[file.path] = [{
             tag: "v0 - Initial",
@@ -311,7 +346,6 @@ class StudioView extends ItemView {
           await this.plugin.saveStudioData();
         }
 
-        // Safely access with optional chaining (?.)
         updateVersionDropdown(file.path, this.plugin.data.versions[file.path]?.[0]?.tag);
         new Notice(`Loaded note: ${file.name}`);
         runCode();
@@ -336,7 +370,7 @@ class StudioView extends ItemView {
       }
     };
 
-	// Create New Version
+    // Save as New Version
     newVersionBtn.onclick = () => {
       if (!this.currentFile) {
         new Notice("Please select a note from the dropdown first!");
@@ -349,8 +383,8 @@ class StudioView extends ItemView {
       const versionsArray = this.plugin.data.versions[path];
       const nextVersionNum = versionsArray ? versionsArray.length : 0;
 
-      new VersionPromptModal(this.app, `Update ${nextVersionNum}`, async (description) => {
-        const tag = `v${nextVersionNum} - ${description}`;
+      new VersionPromptModal(this.app, "Save as New Version", `v${nextVersionNum} - Update`, async (fullTagInput) => {
+        const tag = fullTagInput.startsWith('v') ? fullTagInput : `v${nextVersionNum} - ${fullTagInput}`;
         const newSnapshot: VersionSnapshot = {
           tag,
           html: htmlCode,
@@ -368,6 +402,72 @@ class StudioView extends ItemView {
         updateVersionDropdown(path, tag);
         new Notice(`Created version ${tag}`);
       }).open();
+    };
+
+    // Rename Selected Version
+    renameVersionBtn.onclick = () => {
+      if (!this.currentFile) {
+        new Notice("Please select a note first!");
+        return;
+      }
+      const path = this.currentFile.path;
+      const idx = parseInt(versionSelect.value, 10);
+      const versions = this.plugin.data.versions[path];
+
+      if (isNaN(idx) || !versions || !versions[idx]) {
+        new Notice("Please select a version to rename!");
+        return;
+      }
+
+      const currentTag = versions[idx]!.tag;
+
+      new VersionPromptModal(this.app, "Rename Version", currentTag, async (newTag) => {
+        versions[idx]!.tag = newTag;
+        await this.plugin.saveStudioData();
+        updateVersionDropdown(path, newTag);
+        new Notice(`Renamed version to ${newTag}`);
+      }).open();
+    };
+
+    // Remove Last Version
+    removeVersionBtn.onclick = () => {
+      if (!this.currentFile) {
+        new Notice("Please select a note first!");
+        return;
+      }
+      const path = this.currentFile.path;
+      const versions = this.plugin.data.versions[path];
+
+      if (!versions || versions.length <= 1) {
+        new Notice("Cannot remove the last remaining version!");
+        return;
+      }
+
+      const lastVersion = versions[versions.length - 1];
+
+      new ConfirmModal(
+        this.app,
+        "Remove Last Version",
+        `Are you sure you want to delete the latest version "${lastVersion?.tag}"?`,
+        async () => {
+          versions.pop();
+          await this.plugin.saveStudioData();
+          
+          const newLatest = versions[versions.length - 1];
+          if (newLatest) {
+            htmlCode = newLatest.html;
+            htmlArea.value = htmlCode;
+            cssCode = newLatest.css;
+            cssArea.value = cssCode;
+            jsCode = newLatest.js;
+            jsArea.value = jsCode;
+            runCode();
+          }
+
+          updateVersionDropdown(path, newLatest?.tag);
+          new Notice("Successfully removed the last version.");
+        }
+      ).open();
     };
 
     // Save back to Vault Note
