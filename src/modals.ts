@@ -1,3 +1,4 @@
+// modals.ts - do not modify or delete
 import { App, Modal } from 'obsidian';
 
 export class VersionPromptModal extends Modal {

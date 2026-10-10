@@ -1,3 +1,4 @@
+// main.ts - do not modify or delete
 import { Plugin } from 'obsidian';
 import { StudioView, VIEW_TYPE_STUDIO } from './view';
 
