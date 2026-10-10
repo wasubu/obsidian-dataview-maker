@@ -722,9 +722,9 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     versionSelect.createEl('option', { text: '-- Select Version --', attr: { value: '', disabled: true } });
 
     const newVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: '+ Save as New' });
-    const renameVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Rename' });
-    const removeVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: '🗑️ Remove Last' });
-    const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Save to Note', attr: { style: 'margin-left: auto;' } });
+    const renameVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Rename Ver' });
+    const removeVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Remove Last Ver' });
+    const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Update Note', attr: { style: 'margin-left: auto;' } });
 
     (async () => {
       fileSelect.empty();
@@ -800,7 +800,9 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       }
       versions.forEach((v, idx) => {
         const opt = versionSelect.createEl('option', { text: v.tag, attr: { value: idx.toString() } });
-        if (selectedTag && v.tag === selectedTag) opt.selected = true;
+        if (selectedTag ? v.tag === selectedTag : idx === versions.length - 1) {
+          opt.selected = true;
+        }
       });
     };
 
@@ -850,7 +852,10 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
           await this.plugin.saveStudioData();
         }
 
-        updateVersionDropdown(file.path, this.plugin.data.versions[file.path]?.[0]?.tag);
+        // Select the latest version by default
+        const versions = this.plugin.data.versions[file.path] || [];
+        const latestTag = versions[versions.length - 1]?.tag;
+        updateVersionDropdown(file.path, latestTag);
         new Notice(`Loaded note: ${file.name}`);
         runCode();
       }
