@@ -433,16 +433,21 @@ const insertSuggestion = (item: AutocompleteSuggestion) => {
       return coords;
     };
 
-    textarea.addEventListener('input', () => textarea.addEventListener('input', () => {
+textarea.addEventListener('input', () => {
       renderGutterAndHighlight();
       onChange(textarea.value);
 
       const pos = textarea.selectionStart;
       const textBefore = textarea.value.substring(0, pos);
 
-      // Passes htmlCode into the engine so CSS and JS tabs know HTML classes and IDs in real time
-      const currentHtml = getHtmlCode ? getHtmlCode() : '';
-      const { suggestions, startOffset } = this.autocompleteEngine.getSuggestions(textBefore, textarea.value, mode, currentHtml);
+      // NEVER open dropdown if cursor is directly on a space, tab, newline, or semicolon
+      if (/[\s;\n]$/.test(textBefore)) {
+        hideDropdown();
+        return;
+      }
+
+      // 1. Get suggestions through dedicated engine
+      const { suggestions, startOffset } = this.autocompleteEngine.getSuggestions(textBefore, textarea.value, mode, getHtmlCode ? getHtmlCode() : '');
 
       if (suggestions.length === 0) {
         hideDropdown();
@@ -537,7 +542,7 @@ const insertSuggestion = (item: AutocompleteSuggestion) => {
       dropdown.style.top = `${topPos}px`;
       dropdown.style.left = `${leftPos}px`;
       updateSelectionHighlight();
-    }));
+    });
 
 textarea.addEventListener('keydown', (e: KeyboardEvent) => {
       const start = textarea.selectionStart;
@@ -584,6 +589,11 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
           hideDropdown();
           return;
         }
+      }
+
+      // Pressing Space closes the autocomplete dropdown immediately
+      if (e.key === ' ' && dropdown.style.display === 'block') {
+        hideDropdown();
       }
 
       // =========================================================================
@@ -689,6 +699,19 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     textarea.addEventListener('blur', () => {
       setTimeout(hideDropdown, 200);
     });
+
+    // Clicking anywhere in the textarea closes the dropdown
+    textarea.addEventListener('click', () => {
+      hideDropdown();
+    });
+
+    // Clicking anywhere outside the dropdown in Obsidian closes it
+    const onOutsideClick = (evt: MouseEvent) => {
+      if (!dropdown.contains(evt.target as Node) && evt.target !== textarea) {
+        hideDropdown();
+      }
+    };
+    document.addEventListener('pointerdown', onOutsideClick);
 
     renderGutterAndHighlight();
 
