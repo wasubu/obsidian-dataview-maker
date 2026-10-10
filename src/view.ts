@@ -758,16 +758,21 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
           if (content.includes('dataviewjs')) {
             fileSelect.createEl('option', { text: file.path, attr: { value: file.path } });
           }
-        } catch (e) {}
+} catch (e) {}
       }
     })();
 
-    const tabHeader = container.createDiv({ cls: 'cds-tabs' });
+    // ── Main Body (2 Columns when wide, 1 Column when narrow) ──
+    const mainBody = container.createDiv({ cls: 'cds-main-body' });
+
+    // Column 1: Editor Pane
+    const editorColumn = mainBody.createDiv({ cls: 'cds-editor-column' });
+    const tabHeader = editorColumn.createDiv({ cls: 'cds-tabs' });
     const htmlBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn active', text: 'HTML' });
     const cssBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'CSS' });
     const jsBtn = tabHeader.createEl('button', { cls: 'cds-tab-btn', text: 'JS Logic' });
 
-    const splitContainer = container.createDiv({ cls: 'cds-split' });
+    const splitContainer = editorColumn.createDiv({ cls: 'cds-split' });
 
     const htmlPane = splitContainer.createDiv({ cls: 'cds-editor-pane active' });
     const cssPane = splitContainer.createDiv({ cls: 'cds-editor-pane' });
@@ -783,11 +788,21 @@ textarea.addEventListener('keydown', (e: KeyboardEvent) => {
     const cssEditor = this.createCodeEditor(cssPane, 'css', cssCode, (val) => { cssCode = val; triggerHotReload(); }, () => htmlCode);
     const jsEditor = this.createCodeEditor(jsPane, 'js', jsCode, (val) => { jsCode = val; triggerHotReload(); }, () => htmlCode);
 
-    const previewWrapper = container.createDiv({ cls: 'cds-preview-pane' });
+    // Column 2: Live Preview
+    const previewWrapper = mainBody.createDiv({ cls: 'cds-preview-pane' });
     previewWrapper.createEl('h4', { text: 'Live Preview Output', attr: { style: 'margin-top:0; margin-bottom:8px; font-size:0.85rem; color:var(--text-muted);' } });
     const previewContainer = previewWrapper.createDiv();
+    // Dynamically toggle 2-column mode based on the pane's actual pixel width
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const paneWidth = entry.contentRect.width;
+        mainBody.toggleClass('is-two-column', paneWidth >= 850);
+      }
+    });
+    resizeObserver.observe(container);
+    this.register(() => resizeObserver.disconnect());
 
-const runCode = () => {
+    const runCode = () => {
       // 1. Clean up active animation loops from previous runs
       if ((window as any).__pong_raf) {
         cancelAnimationFrame((window as any).__pong_raf);

@@ -10,6 +10,7 @@
   gap: 10px; 
   padding: 14px; 
   box-sizing: border-box; 
+  overflow: hidden !important;
 }
 
 .cds-toolbar { 
@@ -70,11 +71,36 @@
   font-size: 0.85rem; 
 }
 
+/* ==========================================================================
+   Responsive Main Body Layout (1-Col vs 2-Col)
+   ========================================================================== */
+
+/* Main Body Wrapper (Default: 1-Column Stacked for narrow panes & sidebars) */
+.cds-main-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Editor Column */
+.cds-editor-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 240px;
+  gap: 6px;
+  overflow: hidden;
+}
+
 .cds-split { 
   display: flex; 
   flex-direction: column; 
-  height: 50%; 
-  min-height: 240px; 
+  flex: 1;
+  height: 100%;
+  min-height: 0; 
   gap: 6px; 
 }
 
@@ -91,7 +117,50 @@
   flex-direction: column; 
 }
 
-/* ── Dark Desaturated Blue Code Editor Frame ── */
+/* Preview Pane */
+.cds-preview-pane { 
+  flex: 1; 
+  border: 1px solid var(--background-modifier-border); 
+  border-radius: 6px; 
+  background: var(--background-primary); 
+  overflow: auto; 
+  padding: 12px; 
+  min-height: 240px;
+}
+
+/* Simulated Dataview Root for 1:1 Live Preview */
+.cds-preview-sim-root {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  min-height: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ── 2 Columns Side-by-Side (ONLY when pane width >= 850px) ── */
+.cds-main-body.is-two-column {
+  flex-direction: row !important;
+}
+
+.cds-main-body.is-two-column .cds-editor-column {
+  flex: 1 1 50% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.cds-main-body.is-two-column .cds-split {
+  height: 100% !important;
+}
+
+.cds-main-body.is-two-column .cds-preview-pane {
+  flex: 1 1 50% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+/* ==========================================================================
+   Dark Desaturated Blue Code Editor Frame
+   ========================================================================== */
 .cds-editor-wrapper { 
   display: flex; 
   flex: 1; 
@@ -328,23 +397,4 @@ textarea.cds-textarea-layer::selection {
   padding: 3px 8px; 
   z-index: 10; 
   opacity: 0.95; 
-}
-
-/* Preview Pane - Native Theme */
-.cds-preview-pane { 
-  flex: 1; 
-  border: 1px solid var(--background-modifier-border); 
-  border-radius: 6px; 
-  background: var(--background-primary); 
-  overflow: auto; 
-  padding: 12px; 
-}
-
-/* Simulated Dataview Root for 1:1 Live Preview */
-.cds-preview-sim-root {
-  display: flex !important;
-  flex-direction: column !important;
-  width: 100% !important;
-  min-height: 100% !important;
-  box-sizing: border-box !important;
 }
