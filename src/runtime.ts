@@ -123,7 +123,7 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       }
 
       const handler = (e: KeyboardEvent) => {
-        if (isDestroyed() || !containerEl.isConnected) return;
+        if (isDestroyed() || !containerEl.isConnected || containerEl.offsetParent === null) return;
         if (!keyList || keyList.includes(e.key.toLowerCase()) || keyList.includes(e.code.toLowerCase())) {
           targetFn(e);
         }
@@ -131,6 +131,31 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
 
       window.addEventListener('keydown', handler, options);
       const unbind = () => window.removeEventListener('keydown', handler, options);
+      cleanups.push(unbind);
+      return unbind;
+    },
+
+    // --- ADDED NATIVE ONKEYUP HELPER ---
+    onKeyUp: (keys: string | string[] | ((e: KeyboardEvent) => void), fn?: (e: KeyboardEvent) => void, options?: boolean | AddEventListenerOptions) => {
+      let targetFn: (e: KeyboardEvent) => void;
+      let keyList: string[] | null = null;
+
+      if (typeof keys === 'function') {
+        targetFn = keys;
+      } else {
+        targetFn = fn!;
+        keyList = Array.isArray(keys) ? keys.map(k => k.toLowerCase()) : [keys.toLowerCase()];
+      }
+
+      const handler = (e: KeyboardEvent) => {
+        if (isDestroyed() || !containerEl.isConnected || containerEl.offsetParent === null) return;
+        if (!keyList || keyList.includes(e.key.toLowerCase()) || keyList.includes(e.code.toLowerCase())) {
+          targetFn(e);
+        }
+      };
+
+      window.addEventListener('keyup', handler, options);
+      const unbind = () => window.removeEventListener('keyup', handler, options);
       cleanups.push(unbind);
       return unbind;
     },
