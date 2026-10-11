@@ -219,7 +219,7 @@ export class AutocompleteEngine {
     return out;
   }
 
-  getSuggestions(
+getSuggestions(
     textBefore: string, 
     fullBuffer: string, 
     mode: 'html' | 'css' | 'js',
@@ -413,43 +413,26 @@ export class AutocompleteEngine {
         const objName = dotMatch[1];
         const propQuery = dotMatch[2] ?? '';
 
-        if (objName === 'console') {
+        const objectCompletions: Record<string, string[]> = (tokensData as any).objectCompletions || {};
+
+        if (objName && objectCompletions[objName]) {
           return {
             startOffset: propQuery.length,
             suggestions: this.cleanSuggestions(
-              ['log()', 'warn()', 'error()', 'info()', 'table()', 'clear()'].map(m => ({ text: m, type: 'builtin' })),
+              objectCompletions[objName].map(m => ({ 
+                text: m, 
+                type: objName === 'db' ? 'api' : 'builtin' 
+              })),
               propQuery
             )
           };
         }
-        if (objName === 'db') {
-          return {
-            startOffset: propQuery.length,
-            suggestions: this.cleanSuggestions(
-              [
-                'query()', 'createNote()', 'updateNote()', 'increment()', 'toggleProp()', 
-                'renderList()', 'bindFilter()', 'openNote()', 'modal()', 'state()', 
-                'timer()', 'loop()', 'canvas()', 'onKey()', 'beep()', 'storage()', 
-                'drag()', 'notify()', 'onVaultChange()', 'onCleanup()'
-              ].map(m => ({ text: m, type: 'api' })),
-              propQuery
-            )
-          };
-        }
+
         if (objName === 'dv') {
           return {
             startOffset: propQuery.length,
             suggestions: this.cleanSuggestions(
               this.dynamicDataviewApi.map(api => ({ text: api, type: 'dv' })),
-              propQuery
-            )
-          };
-        }
-        if (objName === 'app') {
-          return {
-            startOffset: propQuery.length,
-            suggestions: this.cleanSuggestions(
-              ['vault', 'workspace', 'metadataCache', 'fileManager'].map(p => ({ text: p, type: 'builtin' })),
               propQuery
             )
           };

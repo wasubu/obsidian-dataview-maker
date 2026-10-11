@@ -24,5 +24,15 @@ export default {
     "map()", "filter()", "forEach()", "find()", "includes()", "slice()", "join()", 
     "length", "push()", "reduce()", "some()", "every()", "sort()", "reverse()", 
     "indexOf()", "split()", "trim()", "replace()", "toLowerCase()", "toUpperCase()"
-  ]
+  ],
+  "objectCompletions": {
+    "console": ["log()", "warn()", "error()", "info()", "table()", "clear()"],
+    "db": [
+      "query()", "createNote()", "updateNote()", "increment()", "toggleProp()", 
+      "renderList()", "bindFilter()", "openNote()", "modal()", "state()", 
+      "timer()", "loop()", "canvas()", "onKey()", "beep()", "storage()", 
+      "drag()", "notify()", "onVaultChange()", "onCleanup()"
+    ],
+    "app": ["vault", "workspace", "metadataCache", "fileManager"]
+  }
 };
