@@ -3,12 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <title>Advanced DB & Runtime Features - Custom Database Studio</title>
+  <style>
+    /* Smooth scrolling for anchor jumps */
+    html {
+      scroll-behavior: smooth;
+    }
+    table code a {
+      color: var(--code-tag, #89b4fa);
+      text-decoration: none;
+    }
+    table code a:hover {
+      text-decoration: underline;
+    }
+  </style>
 </head>
 <body>
   <main>
     <div class="badge">Official Guide &bull; Section 7</div>
     <h1>Advanced DB & Runtime Features</h1>
-    <p class="subtitle">Complete fact-checked reference of the 20+ runtime helpers provided by <code>runtime.ts</code>.</p>
+    <p class="subtitle">Complete fact-checked reference of the 20+ runtime helpers provided by <code>runtime.ts</code>. Click any method in the table below to jump directly to its details.</p>
 
     <!-- SECTION 1 -->
     <section>
@@ -77,17 +90,22 @@
           <td>Triggers an Obsidian toast notification notice (`new Notice()`).</td>
         </tr>
         <tr>
-          <td><code>db.drag(target, moveFn, endFn)</code></td>
+          <td><a href="#section-drag"><code>db.drag(target, moveFn, endFn)</code></a></td>
           <td>Interaction</td>
           <td>Binds touch and mouse pointer drag tracking.</td>
         </tr>
         <tr>
-          <td><code>db.onKey(keys, fn, options)</code></td>
+          <td><a href="#section-onkey"><code>db.onKey(keys, fn, options)</code></a></td>
           <td>Interaction</td>
           <td>Binds scoped window keydown listeners with auto-cleanup.</td>
         </tr>
         <tr>
-          <td><code>db.canvas(selector)</code></td>
+          <td><a href="#section-onkey"><code>db.onKeyUp(keys, fn, options)</code></a></td>
+          <td>Interaction</td>
+          <td>Binds scoped window keyup listeners with auto-cleanup.</td>
+        </tr>
+        <tr>
+          <td><a href="#section-canvas"><code>db.canvas(selector)</code></a></td>
           <td>Graphics</td>
           <td>Sets up High-DPI / Retina-aware HTML5 Canvas with auto-scaling.</td>
         </tr>
@@ -102,12 +120,12 @@
           <td>Managed interval timer controller (`start`, `stop`, `toggle`, `isRunning`).</td>
         </tr>
         <tr>
-          <td><code>db.state(initial, onChange)</code></td>
+          <td><a href="#section-state"><code>db.state(initial, onChange)</code></a></td>
           <td>State</td>
           <td>Reactive state store with `.val`, `.update()`, and `.subscribe()`.</td>
         </tr>
         <tr>
-          <td><code>db.storage(namespace)</code></td>
+          <td><a href="#section-storage"><code>db.storage(namespace)</code></a></td>
           <td>Storage</td>
           <td>Persistent local storage prefixed with `cds_[namespace]_`.</td>
         </tr>
@@ -130,7 +148,7 @@
     </section>
 
     <!-- SECTION 2 -->
-    <section>
+    <section id="section-canvas">
       <h2>High-DPI Canvas Setup (`db.canvas`)</h2>
       <p>Standard HTML5 canvases look blurry on Retina and high-DPI displays unless scaled correctly. <code>db.canvas()</code> automatically calculates device pixel ratios, scales the 2D context, and sets logical canvas dimensions:</p>
 
@@ -150,7 +168,7 @@ if (setup) {
     </section>
 
     <!-- SECTION 3 -->
-    <section>
+    <section id="section-drag">
       <h2>Pointer Drag Handler (`db.drag`)</h2>
       <p>Easily make UI elements draggable using pointer events that seamlessly support both mouse and touch input:</p>
 
@@ -164,20 +182,30 @@ db.drag('#draggable-box', (dx, dy, e) => {
     </section>
 
     <!-- SECTION 4 -->
-    <section>
-      <h2>Scoped Keyboard Listeners (`db.onKey`)</h2>
-      <p>Listen for specific keyboard shortcuts or key presses scoped to your view, with automatic unbinding when closed:</p>
+    <section id="section-onkey">
+      <h2>Scoped Keyboard Listeners (`db.onKey` & `db.onKeyUp`)</h2>
+      <p>Listen for specific keyboard shortcuts, key presses, and key releases scoped to your view (with automatic unbinding when switching tabs or closing the note):</p>
 
-      <pre><code class="language-javascript">// Listen for Enter or Spacebar presses anywhere in the window
-db.onKey(['Enter', ' '], (e) => {
-  if (e.key === 'Enter') {
-    db.notify("Enter key pressed!");
-  }
+      <pre><code class="language-javascript">// Track smooth movement by listening to both keydown and keyup
+let isMovingUp = false;
+
+db.onKey(['ArrowUp', 'w', 'W'], (e) => {
+  isMovingUp = true;
+});
+
+db.onKeyUp(['ArrowUp', 'w', 'W'], (e) => {
+  isMovingUp = false;
+});
+
+// Listen for Spacebar press
+db.onKey(' ', (e) => {
+  e.preventDefault();
+  db.notify("Spacebar pressed!");
 });</code></pre>
     </section>
 
     <!-- SECTION 5 -->
-    <section>
+    <section id="section-state">
       <h2>Reactive State Stores (`db.state`)</h2>
       <p>The <code>db.state()</code> helper creates a reactive state container with built-in subscription handling:</p>
 
@@ -190,7 +218,7 @@ counter.update(prev => prev + 1); // Increments to 6</code></pre>
     </section>
 
     <!-- SECTION 6 -->
-    <section>
+    <section id="section-storage">
       <h2>Persistent Namespaced Storage (`db.storage`)</h2>
       <p>Save local dashboard data that survives Obsidian restarts using namespaced local storage:</p>
 

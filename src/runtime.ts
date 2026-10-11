@@ -348,7 +348,7 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
     toggleProp: async (path: string, prop: string): Promise<boolean> => {
       return db.updateNote(path, (fm) => { fm[prop] = !fm[prop]; });
     },
-query: (source: string, fallback: any[] = []): any[] => {
+    query: (source: string, fallback: any[] = []): any[] => {
       if (isDestroyed()) return fallback;
       
       // 1. Try Dataview API first
@@ -369,11 +369,14 @@ query: (source: string, fallback: any[] = []): any[] => {
         }
       } catch (e) {}
 
-      // 2. Native Obsidian Vault Fallback (Direct folder scan if Dataview isn't ready)
+      // 2. Native Obsidian Vault Fallback (Supports empty string "" to return all notes)
       try {
         const cleanSource = source.replace(/['"]/g, '').trim();
         const files = app.vault.getMarkdownFiles();
-        const matchingFiles = files.filter(f => f.path.startsWith(cleanSource + '/') || f.path === cleanSource + '.md');
+        
+        const matchingFiles = cleanSource === '' 
+          ? files 
+          : files.filter(f => f.path.startsWith(cleanSource + '/') || f.path === cleanSource + '.md' || f.basename.toLowerCase().includes(cleanSource.toLowerCase()));
         
         if (matchingFiles.length > 0) {
           return matchingFiles.map(file => {
@@ -475,6 +478,87 @@ query: (source: string, fallback: any[] = []): any[] => {
         return;
       }
       target.innerHTML = items.map(templateFn).join("");
+    },
+
+    // 1. Copy text to clipboard with automatic notification
+    copyToClipboard: async (text: string): Promise<boolean> => {
+      if (isDestroyed()) return false;
+      try {
+        await navigator.clipboard.writeText(text);
+        db.notify("Copied to clipboard!");
+        return true;
+      } catch (e) {
+        db.notify("Failed to copy to clipboard");
+        return false;
+      }
+    },
+
+    // 2. Debounce helper for search inputs and filters
+    debounce: <T extends (...args: any[]) => void>(fn: T, delayMs = 300): ((...args: Parameters<T>) => void) => {
+      let timeoutId: any = null;
+      const debounced = (...args: Parameters<T>) => {
+        if (isDestroyed()) return;
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => fn(...args), delayMs);
+      };
+      cleanups.push(() => clearTimeout(timeoutId));
+      return debounced;
+    },
+
+    // 3. Read raw markdown content of any vault note
+    readNote: async (path: string): Promise<string | null> => {
+      if (isDestroyed()) return null;
+      try {
+        const file = app.vault.getAbstractFileByPath(path);
+        if (file instanceof TFile) {
+          return await app.vault.read(file);
+        }
+      } catch (e) {}
+      return null;
+    },
+
+
+// 4. Bulletproof Confetti attached to document.body using position: fixed
+    confetti: (x?: number, y?: number) => {
+      if (isDestroyed()) return;
+
+      const startX = x !== undefined ? x : window.innerWidth / 2;
+      const startY = y !== undefined ? y : window.innerHeight / 2;
+
+      const particleCount = 55;
+      const colors = ['#cba6f7', '#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8'];
+
+      for (let i = 0; i < particleCount; i++) {
+        const p = document.createElement('div');
+        p.style.cssText = `
+          position: fixed;
+          left: ${startX}px;
+          top: ${startY}px;
+          width: 8px;
+          height: 8px;
+          background-color: ${colors[Math.floor(Math.random() * colors.length)]};
+          border-radius: 50%;
+          pointer-events: none;
+          z-index: 999999;
+          transform: translate(0px, 0px) scale(1);
+          opacity: 1;
+          transition: transform 0.8s cubic-bezier(0.1, 1, 0.1, 1), opacity 0.8s ease;
+        `;
+        document.body.appendChild(p);
+
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 60 + Math.random() * 120;
+        const targetX = Math.cos(angle) * speed;
+        const targetY = Math.sin(angle) * speed;
+
+        setTimeout(() => {
+          if (isDestroyed()) return;
+          p.style.transform = `translate(${targetX}px, ${targetY}px) scale(${0.4 + Math.random()})`;
+          p.style.opacity = '0';
+        }, 20);
+
+        setTimeout(() => p.remove(), 900);
+      }
     },
 
     bindFilter: (selector: string, options: string[], onSelect: (selected: string) => void) => {
