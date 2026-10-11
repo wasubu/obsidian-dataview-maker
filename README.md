@@ -1,5 +1,6 @@
 # Obsidian Sample Plugin
 
+- [ ] This
 
 ## Rename this plugin?
 It might be a good idea to call this plugin. advanceDB
