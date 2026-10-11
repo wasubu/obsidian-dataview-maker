@@ -48,11 +48,9 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
       cls: 'cds-preview-sim-root'
     });
     noteSimWrapper.addEventListener("pointerdown", (event) => {
-  console.log("[CDS] Pointer reached wrapper:", event.target);
 }, true);
 
 noteSimWrapper.addEventListener("click", (event) => {
-  console.log("[CDS] Click reached wrapper:", event.target);
 }, true);
       noteSimWrapper.style.setProperty('width', '100%', 'important');
       noteSimWrapper.style.setProperty('max-width', '100%', 'important');
@@ -79,15 +77,8 @@ noteSimWrapper.addEventListener("click", (event) => {
       // =========================================================================
       let isDestroyed = false;
       const runtimeId = Math.random().toString(36).slice(2, 8);
-      console.log("[CDS] Runtime created:", runtimeId);
       const triggerTeardown = () => {
         if (isDestroyed) return;
-
-    console.warn(
-        "[CDS] Teardown triggered",
-        "Wrapper connected:",
-        noteSimWrapper.isConnected
-      );
 
         isDestroyed = true;
 
@@ -138,14 +129,6 @@ noteSimWrapper.addEventListener("click", (event) => {
                   height: rect.height
                 };
               });
-
-              console.log("[CDS] RAF heartbeat", {
-                runtimeId,
-                frameCount,
-                wrapperConnected: noteSimWrapper.isConnected,
-                isDestroyed,
-                canvases
-              });
             }
 
             const delta = lastTime !== null ? time - lastTime : 0;
@@ -182,20 +165,11 @@ noteSimWrapper.addEventListener("click", (event) => {
 
             running = true;
             lastTime = null;
-
-            console.log("[CDS] Loop started:", runtimeId);
-
-            rafId = requestAnimationFrame(frame);
+rafId = requestAnimationFrame(frame);
             return controller;
           };
 
           const stop = () => {
-            console.warn("[CDS] Loop stopped:", {
-              runtimeId,
-              running,
-              isDestroyed
-            });
-
             running = false;
 
             if (rafId !== null) {
@@ -595,15 +569,8 @@ noteSimWrapper.addEventListener("click", (event) => {
 
       const runCanvasViewJS = () => {
   if (isDestroyed || !noteSimWrapper.isConnected) {
-    console.warn("[CDS] Skipping JS: wrapper is not connected");
-    return;
+return;
   }
-
-  console.log(
-    "[CDS] Initializing JavaScript. Connected:",
-    noteSimWrapper.isConnected
-  );
-
   try {
     const executionContext = {
       container: noteSimWrapper,
@@ -635,12 +602,8 @@ noteSimWrapper.addEventListener("click", (event) => {
       $,
       $$
     );
-
-    console.log("[CDS] JavaScript initialized successfully");
-  } catch (err: any) {
-    console.error("[CDS] Runtime error:", err);
-
-    const errDiv = noteSimWrapper.createDiv({
+} catch (err: any) {
+const errDiv = noteSimWrapper.createDiv({
       cls: "cds-runtime-error"
     });
 
