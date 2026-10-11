@@ -1040,7 +1040,7 @@ export class StudioView extends ItemView {
 
     let htmlCode = "<div class=\"filter-bar\"></div>\n<div class=\"book-grid\"></div>";
     let cssCode = ".filter-bar { display: flex; gap: 8px; margin-bottom: 16px; }\n.filter-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 6px 12px; border-radius: 4px; color: var(--text-normal); cursor: pointer; }\n.filter-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); }\n.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }";
-    let jsCode = "const pages = dv ? dv.pages() : [];\ncontainer.innerHTML = htmlContent;\nconst grid = container.querySelector('.book-grid');\nfor (const p of pages.slice(0, 8)) {\n  const el = document.createElement('div');\n  el.style.padding = '8px';\n  el.style.border = '1px solid var(--background-modifier-border)';\n  el.innerText = p.file.name;\n  grid.appendChild(el);\n}";
+    let jsCode = "container.innerHTML = htmlContent;\nconst grid = container.querySelector('.book-grid');\nconst files = app.vault.getMarkdownFiles().slice(0, 8);\nfor (const file of files) {\n  const el = document.createElement('div');\n  el.style.padding = '8px';\n  el.style.border = '1px solid var(--background-modifier-border)';\n  el.innerText = file.basename;\n  grid?.appendChild(el);\n}";
 
     const toolbar = container.createDiv({ cls: 'cds-toolbar' });
     toolbar.createEl('span', { text: 'Note:', attr: { style: 'font-weight:600; font-size:0.85rem;' } });
@@ -1176,23 +1176,75 @@ export class StudioView extends ItemView {
       const { db, $, $$ } = this.getRuntimeHelpers(noteSimWrapper, htmlCode);
       (window as any).db = db;
 
-      try {
-        const dvApi = (this.app as any).plugins?.plugins?.dataview?.api;
-        const dataviewContext = {
-          container: noteSimWrapper,
-          app: this.app,
-          dv: dvApi ? Object.assign(Object.create(dvApi), { container: noteSimWrapper }) : null
-        };
+try {
+  const dvApi = (this.app as any).plugins?.plugins?.dataview?.api;
 
-        const executeFn = new Function('container', 'htmlContent', 'app', 'notice', 'dv', 'db', '$', '$$', jsCode);
-        executeFn.call(dataviewContext, noteSimWrapper, htmlCode, this.app, (msg: string) => new Notice(msg), dvApi, db, $, $$);
-      } catch (err: any) {
-        const errDiv = noteSimWrapper.createDiv({ cls: 'cds-runtime-error' });
-        errDiv.style.color = 'var(--text-error)';
-        errDiv.style.fontFamily = 'var(--font-monospace)';
-        errDiv.style.padding = '10px';
-        errDiv.innerText = `Runtime Error: ${err.message}`;
-      }
+  const dv = dvApi
+    ? Object.assign(Object.create(dvApi), {
+        container: noteSimWrapper
+      })
+    : null;
+
+  const dataviewContext = {
+    container: noteSimWrapper,
+    app: this.app,
+    dv
+  };
+
+  console.log("[canvasview] Executing JavaScript", {
+    connected: noteSimWrapper.isConnected,
+    jsLength: jsCode.length,
+    hasDataview: !!dvApi
+  });
+
+  console.log("[canvasview] Extracted JS:\n", jsCode);
+  console.log("[canvasview] HTML:\n", noteSimWrapper.innerHTML);
+  const executeFn = new Function(
+    "container",
+    "htmlContent",
+    "app",
+    "notice",
+    "dv",
+    "db",
+    "$",
+    "$$",
+    `console.log("[canvasview] JS started");\n${jsCode}`
+  );
+
+  executeFn.call(
+    dataviewContext,
+    noteSimWrapper,
+    htmlCode,
+    this.app,
+    (msg: string) => new Notice(msg),
+    dv, // Pass the customized object, not dvApi
+    db,
+    $,
+    $$
+  );
+
+  const testButton = noteSimWrapper.querySelector("button");
+
+console.log("[canvasview] TEST BUTTON:", testButton);
+
+testButton?.addEventListener("click", () => {
+  console.log("[canvasview] TEST BUTTON CLICKED");
+});
+
+  console.log("[canvasview] JS finished");
+
+} catch (err: any) {
+  console.error("[canvasview] Runtime error:", err);
+
+  const errDiv = noteSimWrapper.createDiv({
+    cls: "cds-runtime-error"
+  });
+
+  errDiv.style.color = "var(--text-error)";
+  errDiv.style.fontFamily = "var(--font-monospace)";
+  errDiv.style.padding = "10px";
+  errDiv.innerText = `Runtime Error: ${err.message}`;
+}
     };
 
     const updateVersionDropdown = (path: string, selectedTag?: string) => {

@@ -44,9 +44,16 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
       }
 
       // Match exact wrapper structure & classes used in StudioView preview
-      const noteSimWrapper = el.createDiv({ 
-        cls: 'markdown-rendered markdown-preview-view block-language-dataviewjs cds-preview-sim-root' 
-      });
+    const noteSimWrapper = el.createDiv({
+      cls: 'cds-preview-sim-root'
+    });
+    noteSimWrapper.addEventListener("pointerdown", (event) => {
+  console.log("[CDS] Pointer reached wrapper:", event.target);
+}, true);
+
+noteSimWrapper.addEventListener("click", (event) => {
+  console.log("[CDS] Click reached wrapper:", event.target);
+}, true);
       noteSimWrapper.style.setProperty('width', '100%', 'important');
       noteSimWrapper.style.setProperty('max-width', '100%', 'important');
       noteSimWrapper.style.setProperty('box-sizing', 'border-box', 'important');
@@ -67,6 +74,40 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
       let audioCtx: AudioContext | null = null;
       const app = this.app;
 
+      // =========================================================================
+      // BULLETPROOF TEARDOWN (Fixes audio bleeding on tab close)
+      // =========================================================================
+      let isDestroyed = false;
+      const triggerTeardown = () => {
+        if (isDestroyed) return;
+        isDestroyed = true;
+
+        // 1. Stop all animation loops, timers, and unbind keyboard listeners
+        cleanups.forEach(fn => { try { fn(); } catch(e) {} });
+
+        // 2. Force-close local and global AudioContexts immediately (silences all sound)
+        if (audioCtx) {
+          try { audioCtx.close(); } catch(e) {}
+          audioCtx = null;
+        }
+        if ((window as any).__cds_audio_ctx) {
+          try { (window as any).__cds_audio_ctx.close(); } catch(e) {}
+          (window as any).__cds_audio_ctx = null;
+        }
+      };
+
+      let isInitialized = false;
+      setTimeout(() => { isInitialized = true; }, 300);
+
+      const observer = new MutationObserver(() => {
+        if (!isInitialized) return;
+        if (!noteSimWrapper.isConnected || !document.body.contains(noteSimWrapper)) {
+          observer.disconnect();
+          triggerTeardown();
+        }
+      });
+      observer.observe(noteSimWrapper.parentNode || document.body, { childList: true, subtree: true });
+
       const $ = (sel: string) => noteSimWrapper.querySelector(sel);
       const $$ = (sel: string) => noteSimWrapper.querySelectorAll(sel);
 
@@ -79,15 +120,15 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
           let lastTime: number | null = null;
 
           const frame = (time: number) => {
-            if (!running) return;
+            if (!running || isDestroyed) return;
             const delta = lastTime !== null ? (time - lastTime) : 0;
             lastTime = time;
             fn(delta, time);
-            if (running) rafId = requestAnimationFrame(frame);
+            if (running && !isDestroyed) rafId = requestAnimationFrame(frame);
           };
 
           const start = () => {
-            if (running) return controller;
+            if (running || isDestroyed) return controller;
             running = true;
             lastTime = null;
             rafId = requestAnimationFrame(frame);
@@ -118,16 +159,15 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
           const ctx = canvasEl.getContext('2d');
           const dpr = window.devicePixelRatio || 1;
 
-          // Read fixed logical dimensions from HTML attributes (e.g. width="600" height="380")
           const logicalWidth = parseInt(canvasEl.getAttribute('width') || '', 10) || canvasEl.clientWidth || 300;
           const logicalHeight = parseInt(canvasEl.getAttribute('height') || '', 10) || canvasEl.clientHeight || 150;
 
-          // Initialize high-DPI buffer once & apply CSS auto-scaling
           if (!canvasEl.dataset.initialized) {
             canvasEl.width = logicalWidth * dpr;
             canvasEl.height = logicalHeight * dpr;
             canvasEl.style.width = '100%';
             canvasEl.style.height = 'auto';
+            canvasEl.style.aspectRatio = `${logicalWidth} / ${logicalHeight}`;
             canvasEl.style.maxWidth = '100%';
             canvasEl.style.display = 'block';
             if (ctx) ctx.scale(dpr, dpr);
@@ -163,7 +203,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
           }
 
           const handler = (e: KeyboardEvent) => {
-            if (!noteSimWrapper.isConnected) return;
+            if (isDestroyed || !noteSimWrapper.isConnected) return;
             if (!keyList || keyList.includes(e.key.toLowerCase()) || keyList.includes(e.code.toLowerCase())) {
               targetFn(e);
             }
@@ -176,9 +216,11 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         },
 
         beep: (frequency = 440, duration = 0.1, type: OscillatorType = 'sine', volume = 0.1) => {
+          if (isDestroyed) return;
           try {
             const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
             if (!AudioCtx) return;
+            // Use local instance audioCtx so it dies immediately on teardown
             if (!audioCtx || audioCtx.state === 'closed') audioCtx = new AudioCtx();
             if (audioCtx.state === 'suspended') audioCtx.resume();
 
@@ -234,7 +276,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
           let running = false;
 
           const start = () => {
-            if (running) return ctrl;
+            if (running || isDestroyed) return ctrl;
             running = true;
             timerId = setInterval(fn, intervalMs);
             return ctrl;
@@ -265,10 +307,12 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
           return {
             get val() { return current; },
             set val(next: T) {
+              if (isDestroyed) return;
               current = next;
               listeners.forEach(fn => fn(current));
             },
             update: (updater: (prev: T) => T) => {
+              if (isDestroyed) return current;
               current = updater(current);
               listeners.forEach(fn => fn(current));
               return current;
@@ -281,6 +325,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         },
 
         modal: (title: string, renderFn: (bodyEl: HTMLElement, close: () => void) => void) => {
+          if (isDestroyed) return { close: () => {}, el: document.createElement("div") };
           const backdrop = document.createElement("div");
           backdrop.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;";
 
@@ -315,20 +360,22 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
 
         drag: (target: HTMLElement | string, onMove: (dx: number, dy: number, e: PointerEvent) => void, onEnd?: () => void) => {
           const el = typeof target === 'string' ? noteSimWrapper.querySelector(target) as HTMLElement : target;
-          if (!el) return;
+          if (!el || isDestroyed) return;
 
           let startX = 0, startY = 0;
-          const moveHandler = (e: PointerEvent) => { onMove(e.clientX - startX, e.clientY - startY, e); };
+          const moveHandler = (e: PointerEvent) => { if (!isDestroyed) onMove(e.clientX - startX, e.clientY - startY, e); };
           const upHandler = () => {
             window.removeEventListener('pointermove', moveHandler);
             window.removeEventListener('pointerup', upHandler);
-            if (onEnd) onEnd();
+            if (onEnd && !isDestroyed) onEnd();
           };
           const downHandler = (e: PointerEvent) => {
-            startX = e.clientX;
-            startY = e.clientY;
-            window.addEventListener('pointermove', moveHandler);
-            window.addEventListener('pointerup', upHandler);
+            if (!isDestroyed) {
+              startX = e.clientX;
+              startY = e.clientY;
+              window.addEventListener('pointermove', moveHandler);
+              window.addEventListener('pointerup', upHandler);
+            }
           };
 
           el.addEventListener('pointerdown', downHandler);
@@ -339,11 +386,12 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
           });
         },
 
-        notify: (msg: string, timeout = 4000) => { new Notice(msg, timeout); },
+        notify: (msg: string, timeout = 4000) => { if (!isDestroyed) new Notice(msg, timeout); },
 
         onVaultChange: (fn: (file: TFile) => void) => {
+          if (isDestroyed) return () => {};
           const ref: EventRef = app.vault.on('modify', (file) => {
-            if (file instanceof TFile) fn(file);
+            if (!isDestroyed && file instanceof TFile) fn(file);
           });
           cleanups.push(() => app.vault.offref(ref));
           return () => app.vault.offref(ref);
@@ -358,6 +406,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         },
 
         query: (source: string, fallback: any[] = []): any[] => {
+          if (isDestroyed) return fallback;
           try {
             const dv = (app as any).plugins?.plugins?.dataview?.api;
             if (dv && dv.pages) {
@@ -377,7 +426,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         },
 
         openNote: (path: string) => {
-          if (!path || path === '#') return;
+          if (isDestroyed || !path || path === '#') return;
           app.workspace.openLinkText(path, "", false);
         },
 
@@ -389,6 +438,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
           content?: string; 
           open?: boolean 
         }): Promise<TFile | null> => {
+          if (isDestroyed) return null;
           const folder = opts.folder ? opts.folder.replace(/^\/+|\/+$/g, '') : "";
           const baseName = opts.name || opts.title || opts.frontmatter?.title || opts.frontmatter?.name || "Untitled";
           try {
@@ -420,6 +470,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         updateNote: (() => {
           const queues = new Map<string, Promise<any>>();
           return async (fileOrPath: TFile | string, updater: (frontmatter: Record<string, any>) => void): Promise<boolean> => {
+            if (isDestroyed) return false;
             const file = typeof fileOrPath === 'string' 
               ? app.vault.getAbstractFileByPath(fileOrPath) 
               : fileOrPath;
@@ -442,6 +493,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         })(),
 
         renderList: (selector: string, items: any[], templateFn: (item: any) => string, emptyHtml = '<div class="cds-empty">No items found</div>') => {
+          if (isDestroyed) return;
           const target = noteSimWrapper.querySelector(selector);
           if (!target) return;
           if (!items || items.length === 0) {
@@ -452,6 +504,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         },
 
         bindFilter: (selector: string, options: string[], onSelect: (selected: string) => void) => {
+          if (isDestroyed) return;
           const bar = noteSimWrapper.querySelector(selector);
           if (!bar) return;
           bar.innerHTML = "";
@@ -462,10 +515,12 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
             btn.className = `filter-btn ${opt === active ? "active" : ""}`;
             btn.innerText = opt;
             btn.onclick = () => {
-              active = opt;
-              bar.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
-              btn.classList.add("active");
-              onSelect(opt);
+              if (!isDestroyed) {
+                active = opt;
+                bar.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                onSelect(opt);
+              }
             };
             bar.appendChild(btn);
           });
@@ -473,35 +528,78 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         }
       };
 
-      try {
-        const dvApi = (app as any).plugins?.plugins?.dataview?.api;
-        const dataviewContext = {
-          container: noteSimWrapper,
-          app: app,
-          dv: dvApi ? Object.assign(Object.create(dvApi), { container: noteSimWrapper }) : null
-        };
+      const runCanvasViewJS = () => {
+  if (isDestroyed || !noteSimWrapper.isConnected) {
+    console.warn("[CDS] Skipping JS: wrapper is not connected");
+    return;
+  }
 
-        const executeFn = new Function('container', 'htmlContent', 'app', 'notice', 'dv', 'db', '$', '$$', jsCode);
-        executeFn.call(dataviewContext, noteSimWrapper, htmlCode, app, (msg: string) => new Notice(msg), dvApi, db, $, $$);
-      } catch (err: any) {
-        const errDiv = noteSimWrapper.createDiv({ cls: 'cds-runtime-error' });
-        errDiv.style.color = 'var(--text-error)';
-        errDiv.style.fontFamily = 'var(--font-monospace)';
-        errDiv.style.padding = '10px';
-        errDiv.innerText = `Runtime Error: ${err.message}`;
-      }
+  console.log(
+    "[CDS] Initializing JavaScript. Connected:",
+    noteSimWrapper.isConnected
+  );
+
+  try {
+    const executionContext = {
+      container: noteSimWrapper,
+      app,
+      dv: null,
+      db
+    };
+
+    const executeFn = new Function(
+      "container",
+      "htmlContent",
+      "app",
+      "notice",
+      "dv",
+      "db",
+      "$",
+      "$$",
+      jsCode
+    );
+
+    executeFn.call(
+      executionContext,
+      noteSimWrapper,
+      htmlCode,
+      app,
+      (msg: string) => new Notice(msg),
+      null,
+      db,
+      $,
+      $$
+    );
+
+    console.log("[CDS] JavaScript initialized successfully");
+  } catch (err: any) {
+    console.error("[CDS] Runtime error:", err);
+
+    const errDiv = noteSimWrapper.createDiv({
+      cls: "cds-runtime-error"
+    });
+
+    errDiv.style.color = "var(--text-error)";
+    errDiv.style.fontFamily = "var(--font-monospace)";
+    errDiv.style.padding = "10px";
+    errDiv.innerText = `Runtime Error: ${err.message}`;
+  }
+};
+
+if (noteSimWrapper.isConnected) {
+  runCanvasViewJS();
+} else {
+  const stopWaiting = noteSimWrapper.onNodeInserted(
+    runCanvasViewJS,
+    true
+  );
+
+  cleanups.push(stopWaiting);
+}
 
       ctx.addChild(new (class extends MarkdownRenderChild {
-        constructor(containerEl: HTMLElement) {
-          super(containerEl);
-        }
-        onunload() {
-          cleanups.forEach(fn => { try { fn(); } catch(e) {} });
-          if (audioCtx) {
-            try { audioCtx.close(); } catch(e) {}
-            audioCtx = null;
-          }
-        }
+        constructor(containerEl: HTMLElement) { super(containerEl); }
+        onunload() { triggerTeardown(); }
       })(noteSimWrapper));
     });
 
