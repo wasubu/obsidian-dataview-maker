@@ -14,7 +14,9 @@ const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'i
 const TOKEN_WEIGHTS: Record<string, number> = {
   'const': 95, 'console': 90, 'let': 85, 'function': 85, 'return': 80,
   'async': 75, 'await': 75, 'if': 75, 'for': 70, 'db': 95, '$': 90, '$$': 85, 'dv': 85,
-  'log()': 95, 'query()': 95, 'createNote()': 90, 'renderList()': 90, 'bindFilter()': 85, 'openNote()': 85,
+  'log()': 95, 'query()': 95, 'createNote()': 90, 'updateNote()': 90, 'renderList()': 90, 
+  'bindFilter()': 85, 'openNote()': 85, 'increment()': 85, 'toggleProp()': 85, 'modal()': 85,
+  'state()': 85, 'timer()': 80, 'loop()': 80, 'canvas()': 80, 'storage()': 80, 'notify()': 85,
   'div': 100, 'span': 90, 'button': 90, 'input': 85, 'img': 85, 'a': 80, 'p': 80,
   'class': 95, 'id': 90, 'src': 85, 'href': 85, 'onclick': 80,
   'display': 100, 'flex': 95, 'grid': 90, 'color': 90, 'background': 90, 'padding': 85, 'margin': 85
@@ -244,7 +246,7 @@ export class AutocompleteEngine {
 
     const { classes: htmlClasses, ids: htmlIds } = this.extractHtmlTokens(htmlCode);
 
-// =========================================================================
+    // =========================================================================
     // HTML Context
     // =========================================================================
     if (mode === 'html') {
@@ -279,7 +281,7 @@ export class AutocompleteEngine {
         };
       }
 
-      // Attribute (<div cl|) -> REQUIRES AT LEAST 1 LETTER (stops space/backspace triggers)
+      // Attribute (<div cl|)
       const attrMatch = tagContent.match(/\s+([a-zA-Z0-9-]+)$/);
       if (attrMatch) {
         const query = attrMatch[1] ?? '';
@@ -341,7 +343,6 @@ export class AutocompleteEngine {
       const ruleContent = textBefore.substring(lastOpenBrace);
       const isValueScope = ruleContent.lastIndexOf(':') > ruleContent.lastIndexOf(';');
 
-      // Value Scope (display: fl|) -> REQUIRES AT LEAST 1 LETTER
       if (isValueScope) {
         const valMatch = textBefore.match(/:\s*([a-zA-Z0-9-]+)$/);
         if (valMatch) {
@@ -358,7 +359,6 @@ export class AutocompleteEngine {
         return { suggestions: [], startOffset: 0 };
       }
 
-      // Property Scope (dis|) -> REQUIRES AT LEAST 1 LETTER (stops space/backspace triggers)
       const propMatch = textBefore.match(/([a-zA-Z-]+)$/);
       if (propMatch) {
         const query = propMatch[1] ?? '';
@@ -372,7 +372,7 @@ export class AutocompleteEngine {
       }
     }
 
-// =========================================================================
+    // =========================================================================
     // JavaScript Context
     // =========================================================================
     if (mode === 'js') {
@@ -390,7 +390,6 @@ export class AutocompleteEngine {
       }
 
       // 2. DOM Selectors in db.renderList(), db.bindFilter(), $(), $$(), or any '#id' / '.class'
-      // Runs BEFORE isInsideString so selectors inside quotes work perfectly!
       const selectorFnMatch = textBefore.match(/(?:\$|\$\$|querySelector|querySelectorAll|renderList|bindFilter)\(\s*['"]([#.]?[a-zA-Z0-9_-]*)$/);
       const hashOrDotMatch = textBefore.match(/['"]([#.][a-zA-Z0-9_-]*)$/);
       const selectorMatch = selectorFnMatch || hashOrDotMatch;
@@ -418,7 +417,6 @@ export class AutocompleteEngine {
         } else if (rawQuery.startsWith('#')) {
           list = idSuggestions;
         } else {
-          // If just opened quotes like db.renderList(' without # or ., show both
           list = [...idSuggestions, ...classSuggestions];
         }
 
@@ -428,7 +426,7 @@ export class AutocompleteEngine {
         };
       }
 
-      // 3. Now ignore normal strings (plain text, messages, URLs)
+      // 3. Ignore normal strings
       if (this.isInsideString(textBefore)) return { suggestions: [], startOffset: 0 };
 
       // 4. Member Access after dot (.)
@@ -450,7 +448,12 @@ export class AutocompleteEngine {
           return {
             startOffset: propQuery.length,
             suggestions: this.cleanSuggestions(
-              ['query()', 'createNote()', 'renderList()', 'bindFilter()', 'openNote()', 'updateNote()'].map(m => ({ text: m, type: 'api' })),
+              [
+                'query()', 'createNote()', 'updateNote()', 'increment()', 'toggleProp()', 
+                'renderList()', 'bindFilter()', 'openNote()', 'modal()', 'state()', 
+                'timer()', 'loop()', 'canvas()', 'onKey()', 'beep()', 'storage()', 
+                'drag()', 'notify()', 'onVaultChange()', 'onCleanup()'
+              ].map(m => ({ text: m, type: 'api' })),
               propQuery
             )
           };
@@ -474,7 +477,11 @@ export class AutocompleteEngine {
           };
         }
 
-        const commonMethods = ['map()', 'filter()', 'forEach()', 'find()', 'includes()', 'slice()', 'join()', 'length', 'push()'];
+        const commonMethods = [
+          'map()', 'filter()', 'forEach()', 'find()', 'includes()', 'slice()', 'join()', 
+          'length', 'push()', 'reduce()', 'some()', 'every()', 'sort()', 'reverse()', 
+          'indexOf()', 'split()', 'trim()', 'replace()', 'toLowerCase()', 'toUpperCase()'
+        ];
         return {
           startOffset: propQuery.length,
           suggestions: this.cleanSuggestions([
@@ -490,7 +497,13 @@ export class AutocompleteEngine {
         const query = tokenMatch[1] ?? '';
         const { vars: userVars, fns: userFns } = this.extractUserJsSymbols(fullBuffer);
 
-        const jsTopLevel = ['const', 'let', 'function', 'return', 'if', 'else', 'for', 'while', 'async', 'await', 'new', 'class', 'console', 'db', 'dv', 'app', '$', '$$'];
+        const jsTopLevel = [
+          'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 
+          'async', 'await', 'new', 'class', 'switch', 'case', 'break', 'try', 'catch', 
+          'finally', 'throw', 'typeof', 'instanceof', 'true', 'false', 'null', 'undefined', 
+          'this', 'window', 'document', 'console', 'db', 'dv', 'app', '$', '$$', 
+          'Math', 'JSON', 'Promise', 'setTimeout', 'setInterval', 'localStorage'
+        ];
 
         return {
           startOffset: query.length,

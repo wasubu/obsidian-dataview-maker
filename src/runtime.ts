@@ -323,24 +323,54 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
     toggleProp: async (path: string, prop: string): Promise<boolean> => {
       return db.updateNote(path, (fm) => { fm[prop] = !fm[prop]; });
     },
-
-    query: (source: string, fallback: any[] = []): any[] => {
+query: (source: string, fallback: any[] = []): any[] => {
       if (isDestroyed()) return fallback;
+      
+      // 1. Try Dataview API first
       try {
         const dv = (app as any).plugins?.plugins?.dataview?.api;
         if (dv && dv.pages) {
           const pages = dv.pages(source);
           if (pages && pages.length > 0) {
-            return pages.map((p: any) => ({
+            const arr = typeof pages.array === 'function' ? pages.array() : Array.from(pages);
+            return arr.map((p: any) => ({
               ...p,
-              path: p.file?.path || '#',
-              name: p.file?.name || '',
-              basename: p.file?.basename || '',
-              tags: p.file?.tags || []
-            })).values;
+              path: p.file?.path || p.path || '#',
+              name: p.file?.name || p.name || '',
+              basename: p.file?.basename || p.basename || '',
+              tags: p.file?.tags || p.tags || []
+            }));
           }
         }
       } catch (e) {}
+
+      // 2. Native Obsidian Vault Fallback (Direct folder scan if Dataview isn't ready)
+      try {
+        const cleanSource = source.replace(/['"]/g, '').trim();
+        const files = app.vault.getMarkdownFiles();
+        const matchingFiles = files.filter(f => f.path.startsWith(cleanSource + '/') || f.path === cleanSource + '.md');
+        
+        if (matchingFiles.length > 0) {
+          return matchingFiles.map(file => {
+            const cache = app.metadataCache.getFileCache(file);
+            const fm = cache?.frontmatter || {};
+            return {
+              ...fm,
+              file: {
+                path: file.path,
+                name: file.name,
+                basename: file.basename,
+                tags: cache?.tags?.map((t: any) => t.tag) || []
+              },
+              path: file.path,
+              name: file.name,
+              basename: file.basename,
+              tags: cache?.tags?.map((t: any) => t.tag) || []
+            };
+          });
+        }
+      } catch (e) {}
+
       return fallback;
     },
 

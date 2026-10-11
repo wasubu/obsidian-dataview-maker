@@ -28,7 +28,7 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
     this.registerView(VIEW_TYPE_STUDIO, (leaf) => new StudioView(leaf, this));
 
     // Register the custom ```canvasview codeblock processor with 100% preview parity
-    this.registerMarkdownCodeBlockProcessor("canvasview", (source, el, ctx) => {
+this.registerMarkdownCodeBlockProcessor("canvasview", (source, el, ctx) => {
       let cssCode = "";
       let htmlCode = "";
       let jsCode = source;
@@ -54,7 +54,14 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
       noteSimWrapper.style.setProperty('box-sizing', 'border-box', 'important');
       noteSimWrapper.innerHTML = htmlCode;
 
-      const styleEl = document.createElement('style');
+      // FIX: Inject CSS into document.head so Obsidian's markdown cache never wipes it on cold start
+      const styleId = `cds-style-${ctx.docId || Math.random().toString(36).slice(2)}`;
+      let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+      }
       styleEl.innerHTML = `
         .cds-preview-sim-root > * {
           width: 100% !important;
@@ -63,9 +70,10 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         }
         ${cssCode}
       `;
-      noteSimWrapper.prepend(styleEl);
 
-      const cleanups: Array<() => void> = [];
+      const cleanups: Array<() => void> = [
+        () => styleEl?.remove()
+      ];
       const app = this.app;
       let isDestroyed = false;
 
@@ -143,8 +151,10 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
         }
       };
 
-      // Execute script immediately when rendered in reading mode
-      runCanvasViewJS();
+      // Execute script after Obsidian has finished painting the layout on startup
+      requestAnimationFrame(() => {
+        runCanvasViewJS();
+      });
 
       ctx.addChild(new (class extends MarkdownRenderChild {
         constructor(containerEl: HTMLElement) { super(containerEl); }
