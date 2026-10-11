@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom Database Studio - Complete Developer Guide</title>
+  <style>
+    :root {
+      --bg-base: #11111b;
+      --bg-sidebar: #181825;
+      --bg-card: #1e1e2e;
+      --bg-code: #181825;
+      --accent: #cba6f7;
+      --accent-hover: #b4befe;
+      --text-main: #cdd6f4;
+      --text-muted: #a6adc8;
+      --border: #313244;
+      --success: #a6e3a1;
+      --warning: #f9e2af;
+      --code-tag: #89b4fa;
+      --code-str: #a6e3a1;
+      --code-kw: #f38ba8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      line-height: 1.6;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* SIDEBAR NAVIGATION */
+    aside {
+      width: 280px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      overflow-y: auto;
+      padding: 30px 20px;
+    }
+
+    aside h2 {
+      font-size: 1.1rem;
+      color: var(--accent);
+      margin-bottom: 20px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    aside ul {
+      list-style: none;
+    }
+
+    aside li {
+      margin-bottom: 10px;
+    }
+
+    aside a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.95rem;
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    aside a:hover {
+      color: var(--text-main);
+      background: var(--border);
+    }
+
+    aside .sub-menu {
+      padding-left: 15px;
+      margin-top: 5px;
+      border-left: 1px solid var(--border);
+    }
+
+    aside .sub-menu a {
+      font-size: 0.85rem;
+    }
+
+    /* MAIN CONTENT AREA */
+    main {
+      margin-left: 280px;
+      flex: 1;
+      padding: 60px 80px;
+      max-width: 1100px;
+    }
+
+    h1 {
+      font-size: 2.8rem;
+      color: var(--accent);
+      margin-bottom: 10px;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      margin-bottom: 40px;
+    }
+
+    section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 40px;
+      margin-bottom: 40px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    h2 {
+      font-size: 1.8rem;
+      color: var(--accent);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 1.3rem;
+      color: var(--code-tag);
+      margin: 30px 0 15px 0;
+    }
+
+    h4 {
+      font-size: 1.1rem;
+      color: var(--warning);
+      margin: 20px 0 10px 0;
+    }
+
+    p, li {
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    ul, ol {
+      padding-left: 20px;
+      margin-bottom: 20px;
+    }
+
+    strong {
+      color: var(--text-main);
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+      background: var(--bg-code);
+      color: var(--accent);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      border: 1px solid var(--border);
+    }
+
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      overflow-x: auto;
+      margin: 20px 0;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+      font-size: 0.9rem;
+      color: var(--text-main);
+      line-height: 1.5;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(203, 166, 247, 0.15);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      background: var(--bg-code);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    th {
+      background: rgba(49, 50, 68, 0.5);
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    td {
+      color: var(--text-muted);
+    }
+
+    td code {
+      color: var(--code-tag);
+    }
+
+    .callout {
+      background: rgba(137, 180, 250, 0.1);
+      border-left: 4px solid var(--code-tag);
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 20px 0;
+    }
+
+    .callout p {
+      margin-bottom: 0;
+      color: var(--text-main);
+    }
+
+    @media (max-width: 900px) {
+      aside { display: none; }
+      main { margin-left: 0; padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR NAVIGATION -->
+  <aside>
+    <h2>Documentation</h2>
+    <ul>
+      <li><a href="#introduction">1. Introduction</a></li>
+      <li><a href="#architecture">2. Architecture</a></li>
+      <li><a href="#getting-started">3. Getting Started</a></li>
+      <li><a href="#studio-workspace">4. The Studio Workspace</a>
+        <ul class="sub-menu">
+          <li><a href="#syntax-validation">Syntax Validation</a></li>
+          <li><a href="#smart-autocomplete">Smart Autocomplete</a></li>
+          <li><a href="#delta-versioning">Delta Versioning</a></li>
+        </ul>
+      </li>
+      <li><a href="#db-api-reference">5. The `db` API Reference</a>
+        <ul class="sub-menu">
+          <li><a href="#vault-querying">Vault & Dataview</a></li>
+          <li><a href="#frontmatter-automation">Frontmatter Automation</a></li>
+          <li><a href="#ui-helpers">UI & Interaction</a></li>
+          <li><a href="#animation-state">Animation & State</a></li>
+        </ul>
+      </li>
+      <li><a href="#complete-tutorial">6. Tutorial: Book Catalog</a></li>
+      <li><a href="#troubleshooting">7. Troubleshooting</a></li>
+    </ul>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main>
+    <div class="badge">Official Guide & Reference</div>
+    <h1>Custom Database Studio</h1>
+    <p class="subtitle">Turn static Obsidian markdown notes into fully interactive mini-apps, databases, and custom visual dashboards.</p>
+
+    <!-- SECTION 1 -->
+    <section id="introduction">
+      <h2>1. Introduction</h2>
+      <p><strong>Custom Database Studio</strong> is an advanced plugin for Obsidian designed to bridge the gap between static markdown notes and dynamic applications. By embedding a <code>```canvasview</code> codeblock in your note, you gain access to a fully isolated runtime environment where standard <strong>HTML</strong> templates, <strong>CSS</strong> stylesheets, and <strong>JavaScript</strong> logic execute with native Obsidian integration.</p>
+      <div class="callout">
+        <p><strong>Key Philosophy:</strong> Everything you build inside the Studio has 100% preview parity. What you test in the live preview workspace is guaranteed to behave identically inside Reading Mode across your entire vault.</p>
+      </div>
+    </section>
+
+    <!-- SECTION 2 -->
+    <section id="architecture">
+      <h2>2. Architecture & File Structure</h2>
+      <p>The plugin is modularly designed across dedicated TypeScript modules to maintain high performance and clean separation of concerns:</p>
+      <ul>
+        <li><code>main.ts</code> &mdash; Plugin lifecycle, view registration, and the markdown codeblock processor for Reading Mode with bulletproof audio/timer teardowns.</li>
+        <li><code>view.ts</code> &mdash; The Studio Workspace editor view, managing multi-tab split panes, syntax highlighters, hot-reload triggers, and version dropdowns.</li>
+        <li><code>runtime.ts</code> &mdash; The core <code>db</code> helper environment providing 18+ robust utility functions for both Studio preview and Reading Mode.</li>
+        <li><code>autocomplete.ts</code> &mdash; An intelligent AST and vault-indexing autocomplete engine providing context-aware suggestions.</li>
+        <li><code>autocompleteWords.json</code> &mdash; Externalized dictionaries for keywords, CSS properties, HTML tags, and object method completions (`db.*`, `app.*`).</li>
+        <li><code>modals.ts</code> &mdash; Native Obsidian modals for naming delta versions and handling confirmations.</li>
+      </ul>
+    </section>
+
+    <!-- SECTION 3 -->
+    <section id="getting-started">
+      <h2>3. Getting Started</h2>
+      <ol>
+        <li>Install and enable <strong>Custom Database Studio</strong> in your Obsidian community plugins.</li>
+        <li>Create a new markdown note anywhere in your vault (e.g., <code>Books.md</code>).</li>
+        <li>Open the Command Palette (<code>Ctrl/Cmd + P</code>) and type <strong>"Open Database Studio"</strong>.</li>
+        <li>Select your note from the top dropdown. The Studio will automatically wrap your code inside a <code>```canvasview</code> codeblock wrapper.</li>
+      </ol>
+    </section>
+
+    <!-- SECTION 4 -->
+    <section id="studio-workspace">
+      <h2>4. The Studio Workspace</h2>
+      <p>The Studio workspace features a split-screen layout with code editors on the left and a live simulation preview on the right.</p>
+
+      <h3 id="syntax-validation">Live Syntax Validation</h3>
+      <p>The code editors feature custom line gutters and real-time syntax error banners:</p>
+      <ul>
+        <li><strong>JavaScript:</strong> Evaluates syntax via `new Function()` in real-time, highlighting unclosed curly braces and line numbers.</li>
+        <li><strong>HTML:</strong> Validates tag nesting and unclosed tag pairs (ignoring self-closing void tags like `&lt;img&gt;`, `&lt;br&gt;`, `&lt;input&gt;`).</li>
+        <li><strong>CSS:</strong> Tracks unmatched brace blocks.</li>
+      </ul>
+
+      <h3 id="smart-autocomplete">Smart Autocomplete Engine</h3>
+      <p>Pressing keys in the editor summons a smart context-aware autocomplete menu:</p>
+      <ul>
+        <li><strong>HTML Context:</strong> Suggests tags (with automatic closing tags like `&lt;div&gt;&lt;/div&gt;`) and attributes (`class=""`, `id=""`).</li>
+        <li><strong>CSS Context:</strong> Suggests CSS properties, values, CSS variables (`--*`), and vault HTML classes/IDs.</li>
+        <li><strong>JS Context:</strong> Suggests <code>db.*</code> helpers, Dataview methods (`dv.*`), Obsidian <code>app.*</code> APIs, vault folder paths (<code>"Books"</code>), tags (<code>"#tag"</code>), and local variables declared in your script buffer.</li>
+      </ul>
+
+      <h3 id="delta-versioning">Delta Versioning System</h3>
+      <p>As you iterate on your code, you can save incremental snapshots without duplicating entire files:</p>
+      <ul>
+        <li><strong>+ Save as New:</strong> Creates a delta snapshot (e.g., `v1 - Update Layout`) storing only the code differences (`html`, `css`, or `js`) that changed since the parent version.</li>
+        <li><strong>Rename Ver:</strong> Updates the tag label of the currently selected version.</li>
+        <li><strong>Remove Last Ver:</strong> Deletes the latest snapshot with confirmation.</li>
+      </ul>
+    </section>
+
+    <!-- SECTION 5 -->
+    <section id="db-api-reference">
+      <h2>5. The `db` API Reference</h2>
+      <p>Every canvas view script receives a global helper object named <code>db</code>. Below is the complete reference of available methods:</p>
+
+      <h3 id="vault-querying">Data & Vault Methods</h3>
+      <table>
+        <tr>
+          <th>Method</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td><code>db.query(source, fallback[])</code></td>
+          <td>Queries Dataview pages (e.g., <code>db.query('"Books"')</code>) with automatic fallback to native Obsidian vault folders if Dataview is disabled.</td>
+        </tr>
+        <tr>
+          <td><code>db.createNote(opts)</code></td>
+          <td>Creates a markdown note with optional folder, title, frontmatter dictionary, and content. Automatically handles filename collision counters.</td>
+        </tr>
+        <tr>
+          <td><code>db.updateNote(fileOrPath, updaterFn)</code></td>
+          <td>Atomically updates frontmatter properties safely using Obsidian's file manager queue.</td>
+        </tr>
+        <tr>
+          <td><code>db.increment(path, prop, by=1)</code></td>
+          <td>Shorthand helper to increment a numeric frontmatter property by a given value.</td>
+        </tr>
+        <tr>
+          <td><code>db.toggleProp(path, prop)</code></td>
+          <td>Shorthand helper to invert a boolean frontmatter property.</td>
+        </tr>
+        <tr>
+          <td><code>db.openNote(path)</code></td>
+          <td>Opens a vault note in a workspace leaf.</td>
+        </tr>
+      </table>
+
+      <h3 id="ui-helpers">UI & Interaction Methods</h3>
+      <table>
+        <tr>
+          <th>Method</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td><code>db.renderList(selector, items, templateFn, emptyHtml)</code></td>
+          <td>Populates a container element by mapping an array of items through a template string function.</td>
+        </tr>
+        <tr>
+          <td><code>db.bindFilter(selector, options[], onSelectFn)</code></td>
+          <td>Generates a native button filter bar and handles active state toggling automatically.</td>
+        </tr>
+        <tr>
+          <td><code>db.modal(title, renderFn)</code></td>
+          <td>Spawns a native-themed Obsidian popup modal with a close button and backdrop dismissal.</td>
+        </tr>
+        <tr>
+          <td><code>db.notify(msg, timeout)</code></td>
+          <td>Triggers an Obsidian toast notification notice.</td>
+        </tr>
+        <tr>
+          <td><code>db.drag(target, onMoveFn, onEndFn)</code></td>
+          <td>Binds touch and mouse pointer drag handlers to any element or selector.</td>
+        </tr>
+        <tr>
+          <td><code>db.onKey(keys, fn, options)</code></td>
+          <td>Binds a scoped window keydown listener that automatically cleans up when the view unloads.</td>
+        </tr>
+        <tr>
+          <td><code>db.beep(freq, duration, type, volume)</code></td>
+          <td>Synthesizes procedural audio using the Web Audio API with bulletproof auto-closing teardown.</td>
+        </tr>
+      </table>
+
+      <h3 id="animation-state">Animation & State Management</h3>
+      <table>
+        <tr>
+          <th>Method</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td><code>db.loop(fn)</code></td>
+          <td>Manages a high-performance 60FPS `requestAnimationFrame` loop providing delta time and timestamp parameters.</td>
+        </tr>
+        <tr>
+          <td><code>db.timer(intervalMs, fn)</code></td>
+          <td>Creates a managed interval timer that auto-stops when the note unloads.</td>
+        </tr>
+        <tr>
+          <td><code>db.state(initialVal, onChangeFn)</code></td>
+          <td>Creates a reactive state store with `.val`, `.update()`, and `.subscribe()` methods.</td>
+        </tr>
+        <tr>
+          <td><code>db.storage(namespace)</code></td>
+          <td>Provides namespaced persistent local storage (`get`, `set`, `remove`, `clear`).</td>
+        </tr>
+        <tr>
+          <td><code>db.onVaultChange(fn)</code></td>
+          <td>Listens for vault modification events on markdown files.</td>
+        </tr>
+        <tr>
+          <td><code>db.onCleanup(fn)</code></td>
+          <td>Registers custom teardown logic to execute when the note is closed or reloaded.</td>
+        </tr>
+      </table>
+    </section>
+
+    <!-- SECTION 6 -->
+    <section id="complete-tutorial">
+      <h2>6. Tutorial: Building a Book Catalog Dashboard</h2>
+      <p>Here is a complete, production-ready example of how to combine HTML, CSS, and JS using Custom Database Studio to build an interactive book tracking dashboard reading directly from your vault.</p>
+
+      <h3>1. CSS Stylesheet</h3>
+      <pre><code>// --- CSS ---
+.book-dashboard { font-family: inherit; }
+.top-action-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-btn { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--text-normal); font-size: 0.85rem; font-weight: 500; }
+.filter-btn.active { background: var(--interactive-accent); color: var(--text-on-accent); border-color: var(--interactive-accent); }
+.add-book-btn { background: var(--interactive-accent); color: var(--text-on-accent); border: none; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+.book-card { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; aspect-ratio: 2/3; }
+.book-cover { width: 100%; height: 70%; object-fit: cover; background: var(--background-modifier-form-field); }
+.book-info { padding: 10px; display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
+.book-title { font-weight: 600; font-size: 0.85rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.book-author { font-size: 0.75rem; color: var(--text-muted); }
+.book-status { margin-top: auto; font-size: 0.7rem; color: var(--text-muted); }</code></pre>
+
+      <h3>2. HTML Template</h3>
+      <pre><code>// --- HTML ---
+&lt;div class="book-dashboard"&gt;
+  &lt;div class="top-action-bar"&gt;
+    &lt;div class="filter-bar" id="filter-bar-container"&gt;&lt;/div&gt;
+    &lt;button class="add-book-btn" id="add-book-btn"&gt;&lt;span&gt;+&lt;/span&gt; Add Book&lt;/button&gt;
+  &lt;/div&gt;
+  &lt;div class="book-grid" id="book-grid-container"&gt;&lt;/div&gt;
+&lt;/div&gt;</code></pre>
+
+      <h3>3. JavaScript Logic</h3>
+      <pre><code>// --- JS ---
+container.innerHTML = htmlContent;
+
+let books = [];
+try {
+  if (typeof db !== 'undefined' && db.query) {
+    books = db.query('"Books"').map(b => ({
+      title: b.title || b.file?.name || "Untitled",
+      author: b.author || "Unknown Author",
+      cover: b.cover || "https://via.placeholder.com/150x225?text=No+Cover",
+      status: b.status || "Plan to Read",
+      path: b.file?.path || '#'
+    }));
+  }
+} catch (err) {}
+
+if (books.length === 0) {
+  books = [
+    { title: "Atomic Habits", author: "James Clear", cover: "https://via.placeholder.com/150x225?text=Atomic+Habits", status: "Reading", path: "#" }
+  ];
+}
+
+const filterBar = container.querySelector('#filter-bar-container');
+const addBtn = container.querySelector('#add-book-btn');
+const gridContainer = container.querySelector('#book-grid-container');
+
+if (addBtn) {
+  addBtn.onclick = async () => {
+    await db.createNote({
+      folder: "Books",
+      title: "New Book",
+      frontmatter: { title: "New Book", author: "Unknown Author", status: "Plan to Read", cover: "" },
+      content: "# New Book\n\n",
+      open: true
+    });
+  };
+}
+
+const categories = ["All", "Reading", "Completed", "Plan to Read"];
+let activeCategory = "All";
+
+function renderGrid(category) {
+  if (!gridContainer) return;
+  gridContainer.innerHTML = "";
+
+  const filtered = books.filter(b => category === "All" || (b.status || "").toLowerCase().includes(category.toLowerCase()));
+
+  if (filtered.length === 0) {
+    gridContainer.innerHTML = '&lt;div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted);"&gt;No books found&lt;/div&gt;';
+    return;
+  }
+
+  for (let book of filtered) {
+    const card = document.createElement('div');
+    card.className = "book-card";
+    card.onclick = () => {
+      if (book.path !== "#" && db.openNote) db.openNote(book.path);
+      else db.notify(`Clicked: ${book.title}`);
+    };
+    card.innerHTML = `
+      &lt;img class="book-cover" src="${book.cover}" alt="${book.title}" loading="lazy"&gt;
+      &lt;div class="book-info"&gt;
+        &lt;div class="book-title"&gt;${book.title}&lt;/div&gt;
+        &lt;div class="book-author"&gt;${book.author}&lt;/div&gt;
+        &lt;div class="book-status"&gt;${book.status}&lt;/div&gt;
+      &lt;/div&gt;
+    `;
+    gridContainer.appendChild(card);
+  }
+}
+
+if (filterBar) {
+  db.bindFilter('#filter-bar-container', categories, (selected) => {
+    activeCategory = selected;
+    renderGrid(selected);
+  });
+}
+
+renderGrid("All");</code></pre>
+    </section>
+
+    <!-- SECTION 7 -->
+    <section id="troubleshooting">
+      <h2>7. Troubleshooting & FAQ</h2>
+      <h3>Q: Why is my dashboard not updating when I modify a note?</h3>
+      <p>A: Ensure your script listens to vault changes using <code>db.onVaultChange(() =&gt; { ... })</code> or re-runs your query logic when appropriate.</p>
+      
+      <h3>Q: Audio keeps playing even after I switch notes. How do I fix this?</h3>
+      <p>A: All audio synthesized through <code>db.beep()</code> or custom AudioContexts created via <code>db.onCleanup()</code> automatically terminate when the note unloads in Reading Mode or closes in the Studio.</p>
+    </section>
+
+  </main>
+
+</body>
+</html>
