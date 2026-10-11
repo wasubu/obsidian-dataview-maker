@@ -1,5 +1,5 @@
 // view.ts
-import { ItemView, WorkspaceLeaf, Notice, TFile, EventRef } from 'obsidian';
+import { ItemView, WorkspaceLeaf, Notice, TFile, EventRef, Modal } from 'obsidian';
 import CustomDatabaseStudioPlugin, { VersionSnapshot } from './main';
 import { VersionPromptModal, ConfirmModal } from './modals';
 import { AutocompleteEngine, AutocompleteSuggestion } from './autocomplete';
@@ -274,21 +274,23 @@ export class StudioView extends ItemView {
         };
       },
 
-      // 8. Native Obsidian Modal Popup
-      modal: (title: string, renderFn: (bodyEl: HTMLElement, close: () => void) => void) => {
-        const ModalClass = (window as any).obsidian?.Modal || (this.app as any).constructor?.Modal;
-        const modal = new (class extends ModalClass {
-          onOpen() {
+    // 8. Native Obsidian Modal Popup (Fixed scope to this.app)
+        modal: (title: string, renderFn: (bodyEl: HTMLElement, close: () => void) => void) => {
+        const modalInstance = new (class extends Modal {
+            constructor(app: any) {
+            super(app);
+            }
+            onOpen() {
             this.titleEl.setText(title);
             renderFn(this.contentEl, () => this.close());
-          }
-          onClose() {
+            }
+            onClose() {
             this.contentEl.empty();
-          }
-        })();
-        modal.open();
-        return modal;
-      },
+            }
+        })(this.app);
+        modalInstance.open();
+        return modalInstance;
+        },
 
       // 9. Drag & Touch Pointer Handler
       drag: (target: HTMLElement | string, onMove: (dx: number, dy: number, e: PointerEvent) => void, onEnd?: () => void) => {
@@ -418,18 +420,34 @@ export class StudioView extends ItemView {
         }
       },
 
-      updateNote: async (path: string, updater: (frontmatter: Record<string, any>) => void): Promise<boolean> => {
-        const file = app.vault.getAbstractFileByPath(path);
-        if (file instanceof TFile) {
+// 14. Robust updateNote (accepts string path OR TFile object, with race-condition queue)
+    updateNote: (() => {
+      const queues = new Map<string, Promise<any>>();
+      return async (fileOrPath: TFile | string, updater: (frontmatter: Record<string, any>) => void): Promise<boolean> => {
+        const file = typeof fileOrPath === 'string' 
+          ? app.vault.getAbstractFileByPath(fileOrPath) 
+          : fileOrPath;
+          
+        if (!(file instanceof TFile)) {
+          new Notice("Update error: Active file not found");
+          return false;
+        }
+
+        const path = file.path;
+        const prev = queues.get(path) || Promise.resolve();
+        const current = prev.then(async () => {
           try {
             await app.fileManager.processFrontMatter(file, updater);
             return true;
           } catch (err: any) {
             new Notice(`Update error: ${err.message}`);
+            return false;
           }
-        }
-        return false;
-      },
+        });
+        queues.set(path, current);
+        return current;
+      };
+    })(),
 
       renderList: (selector: string, items: any[], templateFn: (item: any) => string, emptyHtml = '<div class="cds-empty">No items found</div>') => {
         const target = containerEl.querySelector(selector);
@@ -1376,8 +1394,7 @@ export class StudioView extends ItemView {
           "// --- UNIVERSAL HELPERS ---",
           'const container = this.container;',
           'container.innerHTML = htmlContent;',
-          'const $ = (s) => container.querySelector(s);',
-          'const $$ = (s) => container.querySelectorAll(s);',
+          'const $ = (s) => container.querySelector(s);',           'const $$ = (s) => container.querySelectorAll(s);',
           'const db = {',
           '  onCleanup: (fn) => { window.__cds_cleanups[styleId].push(fn); },',
           '  loop: (fn) => {',
@@ -1508,6 +1525,7 @@ export class StudioView extends ItemView {
           '  toggleProp: async (p, prop) => {',
           '    return db.updateNote(p, (fm) => { fm[prop] = !fm[prop]; });',
           '  },',
+          '  frontmatter: async (fileOrPath, fn) => { return db.updateNote(fileOrPath, fn); },',
           '  query: (src, def = []) => {',
           '    try {',
           '      const p = (dv && dv.pages) ? dv.pages(src) : null;',
@@ -1536,10 +1554,26 @@ export class StudioView extends ItemView {
           '    if (opt.open !== false) await app.workspace.getLeaf().openFile(file);',
           '    return file;',
           '  },',
-          '  updateNote: async (p, fn) => {',
-          '    const f = app.vault.getAbstractFileByPath(p);',
-          '    if (f instanceof TFile) await app.fileManager.processFrontMatter(f, fn);',
-          '  },',
+          '  updateNote: (() => {',
+          '    const queues = new Map();',
+          '    return async (fileOrPath, fn) => {',
+          '      const f = typeof fileOrPath === "string" ? app.vault.getAbstractFileByPath(fileOrPath) : fileOrPath;',
+          '      if (!f || f.extension !== "md") return false;', // <-- Fixed: checks if it's a valid markdown file without relying on the TFile class reference
+          '      const path = f.path;',
+          '      const prev = queues.get(path) || Promise.resolve();',
+          '      const current = prev.then(async () => {',
+          '        try {',
+          '          await app.fileManager.processFrontMatter(f, fn);',
+          '          return true;',
+          '        } catch (err) {',
+          '          new Notice(`Update error: ${err.message}`);',
+          '          return false;',
+          '        }',
+          '      });',
+          '      queues.set(path, current);',
+          '      return current;',
+          '    };',
+          '  })(),',
           '  renderList: (sel, items, fn, empty = "<div>No items found</div>") => {',
           '    const el = $(sel); if (!el) return;',
           '    el.innerHTML = (items && items.length) ? items.map(fn).join("") : empty;',
