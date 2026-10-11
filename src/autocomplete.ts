@@ -191,8 +191,8 @@ export class AutocompleteEngine {
     const text = target.toLowerCase();
     const q = query.toLowerCase();
 
-    if (text === q) return 0;
     if (!q || !text.includes(q)) return 0;
+    if (text === q) return 1000; // Exact match gets maximum score so it's always at the top!
 
     const cleanWord = text.replace(/[^a-zA-Z0-9_.]/g, '');
     let weightBoost = TOKEN_WEIGHTS[cleanWord] || TOKEN_WEIGHTS[text] || 0;
@@ -217,20 +217,18 @@ export class AutocompleteEngine {
   private cleanSuggestions(list: AutocompleteSuggestion[], activeWord: string): AutocompleteSuggestion[] {
     const seen = new Set<string>();
     const out: AutocompleteSuggestion[] = [];
-    const lowerActive = activeWord.toLowerCase();
 
     for (const item of list) {
       const key = (item.displayText || item.text).toLowerCase().replace(/[();"']/g, '');
-      if (seen.has(key) || (lowerActive && key === lowerActive)) continue;
+      if (seen.has(key)) continue; // Removed the exact-match filter
       seen.add(key);
 
       const weight = item.weight || TOKEN_WEIGHTS[key] || TOKEN_WEIGHTS[item.text] || 0;
       out.push({ ...item, weight });
     }
 
-    if (!activeWord) {
-      out.sort((a, b) => (b.weight || 0) - (a.weight || 0));
-    }
+    // Sort by score/weight so exact/matching terms stay at the top
+    out.sort((a, b) => (b.weight || 0) - (a.weight || 0));
     return out;
   }
 

@@ -324,10 +324,18 @@ export class StudioView extends ItemView {
     };
 
     textarea.addEventListener('input', () => {
+      const pos = textarea.selectionStart;
+      const textAfter = textarea.value.substring(pos);
+
+      // Do not show suggestions if cursor is in the middle of a word
+      if (textAfter && /^[a-zA-Z0-9_$]/.test(textAfter)) {
+        hideDropdown();
+        return;
+      }
+
       renderGutterAndHighlight();
       onChange(textarea.value);
 
-      const pos = textarea.selectionStart;
       const textBefore = textarea.value.substring(0, pos);
 
       if (/[\s;\n]$/.test(textBefore)) {
@@ -382,9 +390,9 @@ export class StudioView extends ItemView {
           const matchIdx = rawText.toLowerCase().indexOf(activeWord);
           if (matchIdx !== -1) {
             label.createSpan({ text: rawText.substring(0, matchIdx) });
-            label.createSpan({ 
-              cls: 'cds-suggest-match', 
-              text: rawText.substring(matchIdx, matchIdx + activeWord.length) 
+            label.createSpan({
+              cls: 'cds-suggest-match',
+              text: rawText.substring(matchIdx, matchIdx + activeWord.length)
             });
             label.createSpan({ text: rawText.substring(matchIdx + activeWord.length) });
           } else {
@@ -394,9 +402,9 @@ export class StudioView extends ItemView {
           label.textContent = rawText;
         }
 
-        itemEl.createSpan({ 
-          cls: 'cds-suggest-badge', 
-          text: item.type.toUpperCase() 
+        itemEl.createSpan({
+          cls: 'cds-suggest-badge',
+          text: item.type.toUpperCase()
         });
 
         itemEl.onmousedown = (e) => {
