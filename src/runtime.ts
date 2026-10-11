@@ -518,46 +518,110 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
     },
 
 
-// 4. Bulletproof Confetti attached to document.body using position: fixed
-    confetti: (x?: number, y?: number) => {
+// 4. Multi-style Confetti (burst, fireworks, fountain, shockwave)
+    confetti: (x?: number, y?: number, type: 'burst' | 'fireworks' | 'fountain' | 'shockwave' = 'burst') => {
       if (isDestroyed()) return;
 
       const startX = x !== undefined ? x : window.innerWidth / 2;
       const startY = y !== undefined ? y : window.innerHeight / 2;
+      const colors = ['#bc85ffff', '#6aa2fdff', '#8bf581ff', '#ffdc91ff', '#ff729aff'];
 
-      const particleCount = 55;
-      const colors = ['#cba6f7', '#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8'];
+      if (type === 'fountain') {
+        // Upward spray arc
+        const count = 45;
+        for (let i = 0; i < count; i++) {
+          const p = document.createElement('div');
+          p.style.cssText = `
+            position: fixed;
+            left: ${startX}px;
+            top: ${startY}px;
+            width: 7px;
+            height: 7px;
+            background-color: ${colors[Math.floor(Math.random() * colors.length)]};
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 999999;
+            transform: translate(0px, 0px) scale(1);
+            opacity: 1;
+            transition: transform 1s cubic-bezier(0, 0.8, 0.2, 1), opacity 1s ease;
+          `;
+          document.body.appendChild(p);
 
-      for (let i = 0; i < particleCount; i++) {
+          const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.4;
+          const speed = 70 + Math.random() * 80;
+          const targetX = Math.cos(angle) * speed;
+          const targetY = Math.sin(angle) * speed - 50;
+
+          setTimeout(() => {
+            if (isDestroyed()) return;
+            p.style.transform = `translate(${targetX}px, ${targetY}px) scale(${0.3 + Math.random()})`;
+            p.style.opacity = '0';
+          }, 20);
+
+          setTimeout(() => p.remove(), 1000);
+        }
+      } else if (type === 'fireworks') {
         const p = document.createElement('div');
         p.style.cssText = `
           position: fixed;
           left: ${startX}px;
-          top: ${startY}px;
-          width: 8px;
-          height: 8px;
-          background-color: ${colors[Math.floor(Math.random() * colors.length)]};
+          top: ${window.innerHeight}px;
+          width: 6px;
+          height: 6px;
+          background-color: #ff9683ff;
           border-radius: 50%;
           pointer-events: none;
           z-index: 999999;
-          transform: translate(0px, 0px) scale(1);
-          opacity: 1;
-          transition: transform 0.8s cubic-bezier(0.1, 1, 0.1, 1), opacity 0.8s ease;
+          transition: transform 0.6s ease-out, opacity 0.6s ease;
         `;
         document.body.appendChild(p);
 
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 60 + Math.random() * 120;
-        const targetX = Math.cos(angle) * speed;
-        const targetY = Math.sin(angle) * speed;
+        setTimeout(() => {
+          if (isDestroyed()) return;
+          const riseDist = window.innerHeight - startY;
+          p.style.transform = `translate(0px, -${riseDist}px)`;
+        }, 20);
 
         setTimeout(() => {
           if (isDestroyed()) return;
-          p.style.transform = `translate(${targetX}px, ${targetY}px) scale(${0.4 + Math.random()})`;
-          p.style.opacity = '0';
-        }, 20);
+          p.remove();
+          db.confetti(startX, startY, 'burst');
+          db.beep(700, 0.1, 'sine', 0.1);
+        }, 600);
+      } else {
+        // Default 'burst'
+        const particleCount = 50;
+        for (let i = 0; i < particleCount; i++) {
+          const p = document.createElement('div');
+          p.style.cssText = `
+            position: fixed;
+            left: ${startX}px;
+            top: ${startY}px;
+            width: 8px;
+            height: 8px;
+            background-color: ${colors[Math.floor(Math.random() * colors.length)]};
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 999999;
+            transform: translate(0px, 0px) scale(1);
+            opacity: 1;
+            transition: transform 0.8s cubic-bezier(0.1, 1, 0.1, 1), opacity 0.8s ease;
+          `;
+          document.body.appendChild(p);
 
-        setTimeout(() => p.remove(), 900);
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 60 + Math.random() * 120;
+          const targetX = Math.cos(angle) * speed;
+          const targetY = Math.sin(angle) * speed;
+
+          setTimeout(() => {
+            if (isDestroyed()) return;
+            p.style.transform = `translate(${targetX}px, ${targetY}px) scale(${0.4 + Math.random()})`;
+            p.style.opacity = '0';
+          }, 20);
+
+          setTimeout(() => p.remove(), 900);
+        }
       }
     },
 
