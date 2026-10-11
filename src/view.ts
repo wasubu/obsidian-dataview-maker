@@ -1,5 +1,5 @@
 // view.ts
-import { ItemView, WorkspaceLeaf, Notice, TFile } from 'obsidian';
+import { ItemView, WorkspaceLeaf, Notice, TFile, EventRef } from 'obsidian';
 import CustomDatabaseStudioPlugin, { VersionSnapshot } from './main';
 import { VersionPromptModal, ConfirmModal } from './modals';
 import { AutocompleteEngine, AutocompleteSuggestion } from './autocomplete';
@@ -16,7 +16,7 @@ export class StudioView extends ItemView {
   currentFile: TFile | null = null;
   autocompleteEngine: AutocompleteEngine;
 
-  // Universal lifecycle registry (cleans up any user animations, timers, listeners on reload)
+  // Universal lifecycle registry (cleans up user animations, timers, listeners on reload)
   private previewCleanups: Array<() => void> = [];
 
   private runCleanups() {
@@ -67,9 +67,7 @@ export class StudioView extends ItemView {
           const delta = lastTime !== null ? (time - lastTime) : 0;
           lastTime = time;
           fn(delta, time);
-          if (running) {
-            rafId = requestAnimationFrame(frame);
-          }
+          if (running) rafId = requestAnimationFrame(frame);
         };
 
         const start = () => {
@@ -90,13 +88,8 @@ export class StudioView extends ItemView {
         };
 
         const toggle = () => {
-          if (running) {
-            stop();
-            return false;
-          } else {
-            start();
-            return true;
-          }
+          if (running) { stop(); return false; }
+          else { start(); return true; }
         };
 
         const controller = {
@@ -106,32 +99,40 @@ export class StudioView extends ItemView {
           get isRunning() { return running; }
         };
 
-        // Auto clean up on reload
         this.previewCleanups.push(() => stop());
         return controller;
       },
 
-      // 2. One-line Canvas Setup
+      // 2. High-DPI / Retina Aware Canvas Setup
       canvas: (selector: string | HTMLCanvasElement) => {
         const canvasEl = (typeof selector === 'string' ? containerEl.querySelector(selector) : selector) as HTMLCanvasElement | null;
-        if (!canvasEl || !(canvasEl instanceof HTMLCanvasElement)) {
-          return null;
-        }
+        if (!canvasEl || !(canvasEl instanceof HTMLCanvasElement)) return null;
+
         const ctx = canvasEl.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+
+        const logicalWidth = canvasEl.width;
+        const logicalHeight = canvasEl.height;
+
+        canvasEl.width = logicalWidth * dpr;
+        canvasEl.height = logicalHeight * dpr;
+        canvasEl.style.width = `${logicalWidth}px`;
+        canvasEl.style.height = `${logicalHeight}px`;
+
+        if (ctx) ctx.scale(dpr, dpr);
+
         return {
           canvas: canvasEl,
           ctx,
-          get width() { return canvasEl.width; },
-          set width(val: number) { canvasEl.width = val; },
-          get height() { return canvasEl.height; },
-          set height(val: number) { canvasEl.height = val; },
+          width: logicalWidth,
+          height: logicalHeight,
           clear: (color?: string) => {
             if (!ctx) return;
             if (color) {
               ctx.fillStyle = color;
-              ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+              ctx.fillRect(0, 0, logicalWidth, logicalHeight);
             } else {
-              ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+              ctx.clearRect(0, 0, logicalWidth, logicalHeight);
             }
           }
         };
@@ -161,7 +162,7 @@ export class StudioView extends ItemView {
         return unbind;
       },
 
-      // 4. Web Audio Synthesizer (Zero Audio Files)
+      // 4. Web Audio Synthesizer
       beep: (frequency = 440, duration = 0.1, type: OscillatorType = 'sine', volume = 0.1) => {
         try {
           const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -170,10 +171,9 @@ export class StudioView extends ItemView {
             (window as any).__cds_audio_ctx = new AudioCtx();
           }
           const ctx = (window as any).__cds_audio_ctx;
-          if (ctx.state === 'suspended') {
-            ctx.resume();
-          }
-          const dur = duration > 10 ? duration / 1000 : duration; // supports seconds or ms
+          if (ctx.state === 'suspended') ctx.resume();
+
+          const dur = duration > 10 ? duration / 1000 : duration;
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
 
@@ -203,26 +203,151 @@ export class StudioView extends ItemView {
             }
           },
           set: (key: string, value: any) => {
-            try {
-              localStorage.setItem(prefix + key, JSON.stringify(value));
-            } catch (e) {}
+            try { localStorage.setItem(prefix + key, JSON.stringify(value)); } catch (e) {}
           },
           remove: (key: string) => {
-            try {
-              localStorage.removeItem(prefix + key);
-            } catch (e) {}
+            try { localStorage.removeItem(prefix + key); } catch (e) {}
           },
           clear: () => {
             try {
-              const keysToRemove: string[] = [];
+              const keys: string[] = [];
               for (let i = 0; i < localStorage.length; i++) {
                 const k = localStorage.key(i);
-                if (k && k.startsWith(prefix)) keysToRemove.push(k);
+                if (k && k.startsWith(prefix)) keys.push(k);
               }
-              keysToRemove.forEach(k => localStorage.removeItem(k));
+              keys.forEach(k => localStorage.removeItem(k));
             } catch (e) {}
           }
         };
+      },
+
+      // 6. Managed Timer
+      timer: (intervalMs: number, fn: () => void) => {
+        let timerId: any = null;
+        let running = false;
+
+        const start = () => {
+          if (running) return ctrl;
+          running = true;
+          timerId = setInterval(fn, intervalMs);
+          return ctrl;
+        };
+
+        const stop = () => {
+          running = false;
+          if (timerId) { clearInterval(timerId); timerId = null; }
+          return ctrl;
+        };
+
+        const ctrl = {
+          start,
+          stop,
+          toggle: () => (running ? stop() : start()),
+          get isRunning() { return running; }
+        };
+
+        this.previewCleanups.push(() => stop());
+        return ctrl;
+      },
+
+      // 7. Reactive State Store
+      state: <T>(initial: T, onChange?: (val: T) => void) => {
+        let current = initial;
+        const listeners: Array<(val: T) => void> = [];
+        if (onChange) listeners.push(onChange);
+
+        return {
+          get val() { return current; },
+          set val(next: T) {
+            current = next;
+            listeners.forEach(fn => fn(current));
+          },
+          update: (updater: (prev: T) => T) => {
+            current = updater(current);
+            listeners.forEach(fn => fn(current));
+            return current;
+          },
+          subscribe: (fn: (val: T) => void) => {
+            listeners.push(fn);
+            fn(current);
+          }
+        };
+      },
+
+      // 8. Native Obsidian Modal Popup
+      modal: (title: string, renderFn: (bodyEl: HTMLElement, close: () => void) => void) => {
+        const ModalClass = (window as any).obsidian?.Modal || (this.app as any).constructor?.Modal;
+        const modal = new (class extends ModalClass {
+          onOpen() {
+            this.titleEl.setText(title);
+            renderFn(this.contentEl, () => this.close());
+          }
+          onClose() {
+            this.contentEl.empty();
+          }
+        })();
+        modal.open();
+        return modal;
+      },
+
+      // 9. Drag & Touch Pointer Handler
+      drag: (target: HTMLElement | string, onMove: (dx: number, dy: number, e: PointerEvent) => void, onEnd?: () => void) => {
+        const el = typeof target === 'string' ? containerEl.querySelector(target) as HTMLElement : target;
+        if (!el) return;
+
+        let startX = 0, startY = 0;
+
+        const moveHandler = (e: PointerEvent) => {
+          onMove(e.clientX - startX, e.clientY - startY, e);
+        };
+
+        const upHandler = () => {
+          window.removeEventListener('pointermove', moveHandler);
+          window.removeEventListener('pointerup', upHandler);
+          if (onEnd) onEnd();
+        };
+
+        const downHandler = (e: PointerEvent) => {
+          startX = e.clientX;
+          startY = e.clientY;
+          window.addEventListener('pointermove', moveHandler);
+          window.addEventListener('pointerup', upHandler);
+        };
+
+        el.addEventListener('pointerdown', downHandler);
+        this.previewCleanups.push(() => {
+          el.removeEventListener('pointerdown', downHandler);
+          window.removeEventListener('pointermove', moveHandler);
+          window.removeEventListener('pointerup', upHandler);
+        });
+      },
+
+      // 10. Native Obsidian Toast Notice
+      notify: (msg: string, timeout = 4000) => {
+        new Notice(msg, timeout);
+      },
+
+      // 11. Reactive Vault Change Listener
+      onVaultChange: (fn: (file: TFile) => void) => {
+        const ref: EventRef = app.vault.on('modify', (file) => {
+          if (file instanceof TFile) fn(file);
+        });
+        this.previewCleanups.push(() => app.vault.offref(ref));
+        return () => app.vault.offref(ref);
+      },
+
+      // 12. Atomic Frontmatter Increment Helper
+      increment: async (path: string, prop: string, by = 1): Promise<boolean> => {
+        return db.updateNote(path, (fm) => {
+          fm[prop] = (Number(fm[prop]) || 0) + by;
+        });
+      },
+
+      // 13. Atomic Frontmatter Boolean Toggle Helper
+      toggleProp: async (path: string, prop: string): Promise<boolean> => {
+        return db.updateNote(path, (fm) => {
+          fm[prop] = !fm[prop];
+        });
       },
 
       query: (source: string, fallback: any[] = []): any[] => {
@@ -1277,11 +1402,14 @@ export class StudioView extends ItemView {
           '    const c = typeof sel === "string" ? container.querySelector(sel) : sel;',
           '    if (!c || !c.getContext) return null;',
           '    const ctx = c.getContext("2d");',
+          '    const dpr = window.devicePixelRatio || 1;',
+          '    const lw = c.width, lh = c.height;',
+          '    c.width = lw * dpr; c.height = lh * dpr;',
+          '    c.style.width = `${lw}px`; c.style.height = `${lh}px`;',
+          '    if (ctx) ctx.scale(dpr, dpr);',
           '    return {',
-          '      canvas: c, ctx,',
-          '      get width() { return c.width; }, set width(v) { c.width = v; },',
-          '      get height() { return c.height; }, set height(v) { c.height = v; },',
-          '      clear: (col) => { if (!ctx) return; if (col) { ctx.fillStyle = col; ctx.fillRect(0,0,c.width,c.height); } else { ctx.clearRect(0,0,c.width,c.height); } }',
+          '      canvas: c, ctx, width: lw, height: lh,',
+          '      clear: (col) => { if (!ctx) return; if (col) { ctx.fillStyle = col; ctx.fillRect(0,0,lw,lh); } else { ctx.clearRect(0,0,lw,lh); } }',
           '    };',
           '  },',
           '  onKey: (keys, fn, opts) => {',
@@ -1325,6 +1453,60 @@ export class StudioView extends ItemView {
           '        } catch(e) {}',
           '      }',
           '    };',
+          '  },',
+          '  timer: (ms, fn) => {',
+          '    let id = null, run = false;',
+          '    const ctrl = {',
+          '      start: () => { if (!run) { run = true; id = setInterval(fn, ms); } return ctrl; },',
+          '      stop: () => { run = false; if (id) { clearInterval(id); id = null; } return ctrl; },',
+          '      toggle: () => (run ? ctrl.stop() : ctrl.start()),',
+          '      get isRunning() { return run; }',
+          '    };',
+          '    window.__cds_cleanups[styleId].push(() => ctrl.stop());',
+          '    return ctrl;',
+          '  },',
+          '  state: (init, onChange) => {',
+          '    let cur = init;',
+          '    const subs = [];',
+          '    if (onChange) subs.push(onChange);',
+          '    return {',
+          '      get val() { return cur; },',
+          '      set val(n) { cur = n; subs.forEach(s => s(cur)); },',
+          '      update: (u) => { cur = u(cur); subs.forEach(s => s(cur)); return cur; },',
+          '      subscribe: (s) => { subs.push(s); s(cur); }',
+          '    };',
+          '  },',
+          '  modal: (title, renderFn) => {',
+          '    const ModalClass = window.obsidian?.Modal || app.constructor?.Modal;',
+          '    const m = new (class extends ModalClass {',
+          '      onOpen() { this.titleEl.setText(title); renderFn(this.contentEl, () => this.close()); }',
+          '      onClose() { this.contentEl.empty(); }',
+          '    })(app);',
+          '    m.open();',
+          '    return m;',
+          '  },',
+          '  drag: (target, onMove, onEnd) => {',
+          '    const el = typeof target === "string" ? container.querySelector(target) : target;',
+          '    if (!el) return;',
+          '    let sx = 0, sy = 0;',
+          '    const mv = (e) => onMove(e.clientX - sx, e.clientY - sy, e);',
+          '    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); if (onEnd) onEnd(); };',
+          '    const dn = (e) => { sx = e.clientX; sy = e.clientY; window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up); };',
+          '    el.addEventListener("pointerdown", dn);',
+          '    window.__cds_cleanups[styleId].push(() => { el.removeEventListener("pointerdown", dn); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); });',
+          '  },',
+          '  notify: (msg, dur = 4000) => { new Notice(msg, dur); },',
+          '  onVaultChange: (fn) => {',
+          '    const ref = app.vault.on("modify", (f) => { if (f instanceof TFile) fn(f); });',
+          '    const unbind = () => app.vault.offref(ref);',
+          '    window.__cds_cleanups[styleId].push(unbind);',
+          '    return unbind;',
+          '  },',
+          '  increment: async (p, prop, by = 1) => {',
+          '    return db.updateNote(p, (fm) => { fm[prop] = (Number(fm[prop]) || 0) + by; });',
+          '  },',
+          '  toggleProp: async (p, prop) => {',
+          '    return db.updateNote(p, (fm) => { fm[prop] = !fm[prop]; });',
           '  },',
           '  query: (src, def = []) => {',
           '    try {',
