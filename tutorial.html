@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom Database Studio - Documentation & Tutorial</title>
+  <style>
+    :root {
+      --bg-primary: #1e1e2e;
+      --bg-secondary: #252538;
+      --bg-code: #11111b;
+      --accent: #cba6f7;
+      --accent-glow: rgba(203, 166, 247, 0.2);
+      --text-main: #cdd6f4;
+      --text-muted: #a6adc8;
+      --border: #313244;
+      --success: #a6e3a1;
+      --code-tag: #89b4fa;
+      --code-str: #a6e3a1;
+      --code-kw: #f38ba8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 0;
+    }
+
+    header {
+      background: linear-gradient(135deg, #181825 0%, #313244 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 60px 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 2.8rem;
+      color: var(--accent);
+      margin-bottom: 10px;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+
+    section {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 30px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    h2 {
+      font-size: 1.8rem;
+      color: var(--accent);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h3 {
+      font-size: 1.3rem;
+      color: var(--code-tag);
+      margin: 20px 0 10px 0;
+    }
+
+    p, li {
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    ul, ol {
+      padding-left: 20px;
+      margin-bottom: 15px;
+    }
+
+    strong {
+      color: var(--text-main);
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+      background: var(--bg-code);
+      color: var(--accent);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      border: 1px solid var(--border);
+    }
+
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      margin: 15px 0;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+      font-size: 0.9rem;
+      color: var(--text-main);
+    }
+
+    .badge {
+      display: inline-block;
+      background: var(--accent-glow);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 15px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .card {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .card h4 {
+      color: var(--success);
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }
+
+    footer {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      border-top: 1px solid var(--border);
+      margin-top: 60px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="badge">Obsidian Plugin Documentation</div>
+    <h1>Custom Database Studio</h1>
+    <p>Transform your Obsidian notes into stunning, interactive mini-apps, widgets, and databases with live HTML, CSS, and JS execution.</p>
+  </header>
+
+  <div class="container">
+
+    <!-- OVERVIEW -->
+    <section>
+      <h2>✨ Overview</h2>
+      <p><strong>Custom Database Studio</strong> is an all-in-one development studio built directly inside Obsidian. It allows you to write custom user interfaces using standard <strong>HTML</strong>, <strong>CSS</strong>, and <strong>JavaScript</strong>, query your vault notes seamlessly, and render them in Reading Mode using the custom <code>```canvasview</code> codeblock.</p>
+      <div class="grid">
+        <div class="card">
+          <h4>⚡ Live Hot-Reloading</h4>
+          <p>Instantly preview your HTML/CSS/JS edits in real-time as you type in the Studio workspace.</p>
+        </div>
+        <div class="card">
+          <h4>🧠 Smart Autocomplete</h4>
+          <p>Context-aware suggestions for vault folders, tags, frontmatter keys, HTML tags, CSS properties, and `db` methods.</p>
+        </div>
+        <div class="card">
+          <h4>📦 Delta Versioning</h4>
+          <p>Save multiple versions (`v0`, `v1`, etc.) of your scripts directly inside plugin data with rollback support.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- GETTING STARTED -->
+    <section>
+      <h2>🚀 Getting Started</h2>
+      <ol>
+        <li>Open the command palette (<code>Ctrl/Cmd + P</code>) and run <strong>"Open Database Studio"</strong>, or click the template icon in your left ribbon.</li>
+        <li>Create or select an existing Markdown note that contains a <code>```canvasview</code> block.</li>
+        <li>Use the <strong>HTML</strong>, <strong>CSS</strong>, and <strong>JS Logic</strong> tabs to build your interface.</li>
+        <li>Click <strong>💾 Update Note</strong> to save your code back into the markdown file.</li>
+      </ol>
+    </section>
+
+    <!-- THE DB HELPER API -->
+    <section>
+      <h2>🛠️ The `db` Helper API</h2>
+      <p>Your JavaScript code has access to a powerful global object named <code>db</code> designed specifically for Obsidian vaults:</p>
+
+      <h3>1. Vault & Dataview Querying</h3>
+      <pre><code>// Queries pages in the "Books" folder or matching criteria
+const books = db.query('"Books"');</code></pre>
+
+      <h3>2. Frontmatter & Note Automation</h3>
+      <pre><code>// Increment a frontmatter property atomically
+await db.increment('Notes/Project.md', 'completedTasks', 1);
+
+// Toggle a boolean frontmatter property
+await db.toggleProp('Notes/Settings.md', 'darkMode');
+
+// Create a new note with frontmatter and open it
+await db.createNote({
+  folder: 'Tasks',
+  title: 'New Task',
+  frontmatter: { status: 'todo', priority: 'high' },
+  content: '# Task Details\n\n',
+  open: true
+});</code></pre>
+
+      <h3>3. UI Helpers & Modals</h3>
+      <pre><code>// Display a native Obsidian notice toast
+db.notify('Operation successful!');
+
+// Open a native-themed DOM modal
+db.modal('Settings', (bodyEl, close) => {
+  bodyEl.innerHTML = '<p>Hello from modal!</p>';
+});
+
+// Play procedural audio feedback
+db.beep(440, 0.1, 'sine', 0.1);</code></pre>
+
+      <h3>4. Animation Loops & Timers</h3>
+      <pre><code>// 60FPS High-Performance Animation Loop
+const anim = db.loop((delta, time) => {
+  // animation frame logic here
+});
+anim.start();
+
+// Managed timer
+const timer = db.timer(1000, () => {
+  console.log('Ticked every 1 second');
+});
+timer.start();</code></pre>
+    </section>
+
+    <!-- CODEBLOCK STRUCTURE -->
+    <section>
+      <h2>📦 Codeblock Structure</h2>
+      <p>In your markdown files, <code>```canvasview</code> blocks are structured into three clearly commented sections so the Studio can parse and edit them independently:</p>
+      <pre><code>```canvasview
+// --- CSS ---
+.my-card {
+  background: var(--background-secondary);
+  padding: 12px;
+  border-radius: 8px;
+}
+
+// --- HTML ---
+&lt;div class="my-card"&gt;
+  &lt;h3&gt;Hello World&lt; /h3&gt;
+&lt; /div&gt;
+
+// --- JS ---
+container.innerHTML = htmlContent;
+db.notify("CanvasView loaded successfully!");
+```</code></pre>
+    </section>
+
+    <!-- KEYBOARD & THEME ACCESSIBILITY -->
+    <section>
+      <h2>🎨 Obsidian Theme Integration</h2>
+      <p>Custom Database Studio automatically inherits Obsidian's native interface variables. Always use CSS variables in your stylesheets so your dashboards adapt seamlessly to light and dark modes:</p>
+      <ul>
+        <li><code>var(--background-primary)</code> &mdash; Main background color</li>
+        <li><code>var(--background-secondary)</code> &mdash; Card and sidebar background</li>
+        <li><code>var(--background-modifier-border)</code> &mdash; Clean borders</li>
+        <li><code>var(--interactive-accent)</code> &mdash; Obsidian accent color for buttons and active tabs</li>
+        <li><code>var(--text-normal)</code> &mdash; Primary text color</li>
+        <li><code>var(--text-muted)</code> &mdash; Subtitles and secondary text</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <footer>
+    <p>Custom Database Studio &bull; Built for Obsidian</p>
+  </footer>
+
+</body>
+</html>
