@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Getting Started - Custom Database Studio</title>
+  <style>
+    :root {
+      --bg-base: #11111b; --bg-sidebar: #181825; --bg-card: #1e1e2e; --bg-code: #181825;
+      --accent: #cba6f7; --text-main: #cdd6f4; --text-muted: #a6adc8; --border: #313244;
+      --success: #a6e3a1; --code-tag: #89b4fa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-base); color: var(--text-main); display: flex; min-height: 100vh; }
+    
+    aside { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; padding: 30px 20px; }
+    aside h2 { font-size: 1.1rem; color: var(--accent); margin-bottom: 20px; text-transform: uppercase; }
+    aside ul { list-style: none; }
+    aside li { margin-bottom: 10px; }
+    aside a { color: var(--text-muted); text-decoration: none; font-size: 0.95rem; display: block; padding: 8px 12px; border-radius: 6px; transition: all 0.2s; }
+    aside a:hover, aside a.active { color: var(--text-main); background: var(--border); }
+    aside a.active { color: var(--accent); font-weight: 600; border-left: 3px solid var(--accent); }
+
+    main { margin-left: 280px; flex: 1; padding: 60px 80px; max-width: 1000px; }
+    h1 { font-size: 2.5rem; color: var(--accent); margin-bottom: 20px; }
+    section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 40px; margin-bottom: 40px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+    h2 { font-size: 1.8rem; color: var(--accent); margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    p, li { color: var(--text-muted); margin-bottom: 14px; }
+    ol { padding-left: 20px; }
+    strong { color: var(--text-main); }
+    code { font-family: monospace; background: var(--bg-code); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 0.9rem; border: 1px solid var(--border); }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; padding: 20px; overflow-x: auto; margin: 20px 0; font-family: monospace; font-size: 0.9rem; color: var(--text-main); }
+  </style>
+</head>
+<body>
+
+  <aside>
+    <h2>Documentation</h2>
+    <ul>
+      <li><a href="index.html">1. Introduction</a></li>
+      <li><a href="getting-started.html" class="active">2. Getting Started</a></li>
+      <li><a href="db-api.html">3. The `db` API Reference</a></li>
+      <li><a href="book-catalog.html">4. Tutorial: Book Catalog</a></li>
+    </ul>
+  </aside>
+
+  <main>
+    <h1>Getting Started</h1>
+
+    <section>
+      <h2>Installation & Setup</h2>
+      <ol>
+        <li>Install and enable <strong>Custom Database Studio</strong> in your Obsidian community plugins.</li>
+        <li>Create a new markdown note anywhere in your vault (e.g., <code>Dashboard.md</code>).</li>
+        <li>Open the Command Palette (<code>Ctrl/Cmd + P</code>) and type <strong>"Open Database Studio"</strong>.</li>
+        <li>Select your note from the top dropdown. The Studio workspace will open on the right.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Codeblock Structure</h2>
+      <p>Inside your markdown notes, Custom Database Studio relies on three clearly commented sections inside a <code>```canvasview</code> block:</p>
+      <pre><code>```canvasview
+// --- CSS ---
+.my-card {
+  background: var(--background-secondary);
+  padding: 16px;
+  border-radius: 8px;
+}
+
+// --- HTML ---
+&lt;div class="my-card"&gt;
+  &lt;h3&gt;Hello World&lt;/h3&gt;
+&lt;/div&gt;
+
+// --- JS ---
+container.innerHTML = htmlContent;
+db.notify("Dashboard loaded!");
+```</code></pre>
+    </section>
+  </main>
+
+</body>
+</html>

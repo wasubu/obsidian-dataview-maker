@@ -1,0 +1,196 @@
+ !DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tutorial: Retro Pong Game - Custom Database Studio</title>
+  <style>
+    :root {
+      --bg-base: #11111b; --bg-sidebar: #181825; --bg-card: #1e1e2e; --bg-code: #181825;
+      --accent: #cba6f7; --text-main: #cdd6f4; --text-muted: #a6adc8; --border: #313244;
+      --success: #a6e3a1; --code-tag: #89b4fa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-base); color: var(--text-main); display: flex; min-height: 100vh; }
+    
+    aside { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; padding: 30px 20px; }
+    aside h2 { font-size: 1.1rem; color: var(--accent); margin-bottom: 20px; text-transform: uppercase; }
+    aside ul { list-style: none; }
+    aside li { margin-bottom: 10px; }
+    aside a { color: var(--text-muted); text-decoration: none; font-size: 0.95rem; display: block; padding: 8px 12px; border-radius: 6px; transition: all 0.2s; }
+    aside a:hover, aside a.active { color: var(--text-main); background: var(--border); }
+    aside a.active { color: var(--accent); font-weight: 600; border-left: 3px solid var(--accent); }
+
+    main { margin-left: 280px; flex: 1; padding: 60px 80px; max-width: 1000px; }
+    h1 { font-size: 2.5rem; color: var(--accent); margin-bottom: 20px; }
+    section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 40px; margin-bottom: 40px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+    h2 { font-size: 1.8rem; color: var(--accent); margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    p, li { color: var(--text-muted); margin-bottom: 14px; }
+    strong { color: var(--text-main); }
+    code { font-family: monospace; background: var(--bg-code); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 0.9rem; border: 1px solid var(--border); }
+    pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; padding: 20px; overflow-x: auto; margin: 20px 0; font-family: monospace; font-size: 0.9rem; color: var(--text-main); }
+    .callout { background: rgba(137, 180, 250, 0.1); border-left: 4px solid var(--code-tag); padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+    .callout p { margin-bottom: 0; color: var(--text-main); }
+  </style>
+</head>
+<body>
+
+  <aside>
+    <h2>Documentation</h2>
+    <ul>
+      <li><a href="index.html">1. Introduction</a></li>
+      <li><a href="getting-started.html">2. Getting Started</a></li>
+      <li><a href="db-api.html">3. The `db` API Reference</a></li>
+      <li><a href="book-catalog.html">4. Tutorial: Book Catalog</a></li>
+      <li><a href="pong-tutorial.html" class="active">5. Tutorial: Retro Pong</a></li>
+    </ul>
+  </aside>
+
+  <main>
+    <h1>Tutorial: Building a Retro Pong Game</h1>
+
+    <section>
+      <h2>Overview</h2>
+      <p>Custom Database Studio isn't just for static databases—because it supports full HTML5 Canvas and 60FPS requestAnimationFrame loops, you can build fully interactive games directly inside your Obsidian notes!</p>
+      
+      <div class="callout">
+        <p><strong>Key APIs Used:</strong> <code>db.canvas()</code> for high-DPI scaling, <code>db.loop()</code> for game physics, and <code>db.beep()</code> for procedural retro sound effects.</p>
+      </div>
+
+      <h3>1. CSS Stylesheet</h3>
+      <pre><code>// --- CSS ---
+.pong-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: monospace;
+  background: var(--background-secondary);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--background-modifier-border);
+}
+.pong-container h2 {
+  margin-bottom: 12px;
+  color: var(--text-normal);
+}
+#pongCanvas {
+  background: #000;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  max-width: 100%;
+  height: auto;
+}
+.pong-instructions {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}</code></pre>
+
+      <h3>2. HTML Template</h3>
+      <pre><code>// --- HTML ---
+&lt;div class="pong-container"&gt;
+  &lt;h2&gt;Obsidian Retro Pong&lt;/h2&gt;
+  &lt;canvas id="pongCanvas" width="600" height="400"&gt;&lt;/canvas&gt;
+  &lt;div class="pong-instructions"&gt;Use W / S or Arrow Keys to move your paddle&lt;/div&gt;
+&lt;/div&gt;</code></pre>
+
+      <h3>3. JavaScript Game Logic</h3>
+      <pre><code>// --- JS ---
+container.innerHTML = htmlContent;
+
+const setup = db.canvas('#pongCanvas');
+if (!setup) return;
+const { canvas, ctx, width, height, clear } = setup;
+
+let playerY = height / 2 - 40;
+let aiY = height / 2 - 40;
+const paddleWidth = 12;
+const paddleHeight = 80;
+
+let ballX = width / 2;
+let ballY = height / 2;
+let ballSpeedX = 4;
+let ballSpeedY = 3;
+const ballSize = 10;
+
+let playerScore = 0;
+let aiScore = 0;
+
+let upPressed = false;
+let downPressed = false;
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') upPressed = true;
+  if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') downPressed = true;
+});
+
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') upPressed = false;
+  if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') downPressed = false;
+});
+
+const gameLoop = db.loop((delta, time) => {
+  if (upPressed) playerY -= 6;
+  if (downPressed) playerY += 6;
+  playerY = Math.max(0, Math.min(height - paddleHeight, playerY));
+
+  const aiCenter = aiY + paddleHeight / 2;
+  if (aiCenter < ballY - 15) aiY += 4;
+  else if (aiCenter > ballY + 15) aiY -= 4;
+  aiY = Math.max(0, Math.min(height - paddleHeight, aiY));
+
+  ballX += ballSpeedX;
+  ballY += ballSpeedY;
+
+  if (ballY <= 0 || ballY >= height - ballSize) {
+    ballSpeedY *= -1;
+    db.beep(300, 0.05, 'square', 0.05);
+  }
+
+  if (ballX <= 30 + paddleWidth && ballY >= playerY && ballY <= playerY + paddleHeight) {
+    ballSpeedX *= -1;
+    db.beep(600, 0.08, 'sine', 0.1);
+  }
+
+  if (ballX >= width - 30 - paddleWidth && ballY >= aiY && ballY <= aiY + paddleHeight) {
+    ballSpeedX *= -1;
+    db.beep(600, 0.08, 'sine', 0.1);
+  }
+
+  if (ballX < 0) {
+    aiScore++;
+    db.beep(150, 0.2, 'sawtooth', 0.1);
+    ballX = width / 2;
+    ballY = height / 2;
+    ballSpeedX = 4;
+  } else if (ballX > width) {
+    playerScore++;
+    db.beep(800, 0.2, 'sine', 0.1);
+    ballX = width / 2;
+    ballY = height / 2;
+    ballSpeedX = -4;
+  }
+
+  clear('#11111b');
+
+  ctx.fillStyle = '#cba6f7';
+  for (let i = 0; i < height; i += 20) {
+    ctx.fillRect(width / 2 - 1, i, 2, 10);
+  }
+
+  ctx.fillRect(30, playerY, paddleWidth, paddleHeight);
+  ctx.fillRect(width - 30 - paddleWidth, aiY, paddleWidth, paddleHeight);
+  ctx.fillRect(ballX, ballY, ballSize, ballSize);
+
+  ctx.font = '32px monospace';
+  ctx.fillStyle = '#cdd6f4';
+  ctx.fillText(playerScore, width / 4, 50);
+  ctx.fillText(aiScore, (width / 4) * 3, 50);
+});
+
+gameLoop.start();</code></pre>
+    </section>
+  </main>
+
+</body>
+</html>
