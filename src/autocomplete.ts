@@ -1,5 +1,6 @@
 // autocomplete.ts
 import { App, TFolder } from 'obsidian';
+import tokensData from './autocompleteWords';
 
 export interface AutocompleteSuggestion {
   text: string;
@@ -9,18 +10,10 @@ export interface AutocompleteSuggestion {
   score?: number;
 }
 
-const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
-
-const TOKEN_WEIGHTS: Record<string, number> = {
-  'const': 95, 'console': 90, 'let': 85, 'function': 85, 'return': 80,
-  'async': 75, 'await': 75, 'if': 75, 'for': 70, 'db': 95, '$': 90, '$$': 85, 'dv': 85,
-  'log()': 95, 'query()': 95, 'createNote()': 90, 'updateNote()': 90, 'renderList()': 90, 
-  'bindFilter()': 85, 'openNote()': 85, 'increment()': 85, 'toggleProp()': 85, 'modal()': 85,
-  'state()': 85, 'timer()': 80, 'loop()': 80, 'canvas()': 80, 'storage()': 80, 'notify()': 85,
-  'div': 100, 'span': 90, 'button': 90, 'input': 85, 'img': 85, 'a': 80, 'p': 80,
-  'class': 95, 'id': 90, 'src': 85, 'href': 85, 'onclick': 80,
-  'display': 100, 'flex': 95, 'grid': 90, 'color': 90, 'background': 90, 'padding': 85, 'margin': 85
-};
+const VOID_TAGS = new Set<string>(tokensData.voidTags);
+const TOKEN_WEIGHTS: Record<string, number> = tokensData.tokenWeights;
+const JS_TOP_LEVEL: string[] = tokensData.jsTopLevel;
+const COMMON_METHODS: string[] = tokensData.commonMethods;
 
 export class AutocompleteEngine {
   app: App;
@@ -133,15 +126,12 @@ export class AutocompleteEngine {
     const vars = new Set<string>();
     const fns = new Set<string>();
 
-    // const X, let X, var X
     const declMatches = jsCode.matchAll(/\b(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g);
     for (const m of declMatches) if (m[1]) vars.add(m[1]);
 
-    // function myFunc()
     const fnMatches = jsCode.matchAll(/\bfunction\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g);
     for (const m of fnMatches) if (m[1]) fns.add(m[1]);
 
-    // (param1, param2) =>
     const paramMatches = jsCode.matchAll(/\(([a-zA-Z_$,\s]+)\)\s*=>/g);
     for (const m of paramMatches) {
       if (m[1]) {
@@ -152,7 +142,6 @@ export class AutocompleteEngine {
       }
     }
 
-    // for (let item of items)
     const forMatches = jsCode.matchAll(/\bfor\s*\(\s*(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s+(?:of|in)\b/g);
     for (const m of forMatches) if (m[1]) vars.add(m[1]);
 
@@ -192,12 +181,11 @@ export class AutocompleteEngine {
     const q = query.toLowerCase();
 
     if (!q || !text.includes(q)) return 0;
-    if (text === q) return 1000; // Exact match gets maximum score so it's always at the top!
+    if (text === q) return 1000;
 
     const cleanWord = text.replace(/[^a-zA-Z0-9_.]/g, '');
     let weightBoost = TOKEN_WEIGHTS[cleanWord] || TOKEN_WEIGHTS[text] || 0;
 
-    // High relevance boost for user variables, functions, and HTML classes/IDs
     if (type === 'var' || type === 'fn' || type === 'html-class' || type === 'html-id') {
       weightBoost = Math.max(weightBoost, 90);
     }
@@ -220,14 +208,13 @@ export class AutocompleteEngine {
 
     for (const item of list) {
       const key = (item.displayText || item.text).toLowerCase().replace(/[();"']/g, '');
-      if (seen.has(key)) continue; // Removed the exact-match filter
+      if (seen.has(key)) continue;
       seen.add(key);
 
       const weight = item.weight || TOKEN_WEIGHTS[key] || TOKEN_WEIGHTS[item.text] || 0;
       out.push({ ...item, weight });
     }
 
-    // Sort by score/weight so exact/matching terms stay at the top
     out.sort((a, b) => (b.weight || 0) - (a.weight || 0));
     return out;
   }
@@ -259,7 +246,6 @@ export class AutocompleteEngine {
       const inSingleQuotes = (tagContent.match(/'/g) || []).length % 2 === 1;
       if (inDoubleQuotes || inSingleQuotes) return { suggestions: [], startOffset: 0 };
 
-      // Tag name (<di|)
       const tagMatch = tagContent.match(/^<([a-zA-Z0-9-]*)$/);
       if (tagMatch) {
         const query = tagMatch[1] ?? '';
@@ -279,7 +265,6 @@ export class AutocompleteEngine {
         };
       }
 
-      // Attribute (<div cl|)
       const attrMatch = tagContent.match(/\s+([a-zA-Z0-9-]+)$/);
       if (attrMatch) {
         const query = attrMatch[1] ?? '';
@@ -337,7 +322,6 @@ export class AutocompleteEngine {
         return { suggestions: [], startOffset: 0 };
       }
 
-      // Inside { }
       const ruleContent = textBefore.substring(lastOpenBrace);
       const isValueScope = ruleContent.lastIndexOf(':') > ruleContent.lastIndexOf(';');
 
@@ -374,7 +358,6 @@ export class AutocompleteEngine {
     // JavaScript Context
     // =========================================================================
     if (mode === 'js') {
-      // 1. Vault Queries Inside quotes: dv.pages("...") or db.query("...")
       if (/(?:dv\.pages|db\.query)\([^)]*$/.test(textBefore)) {
         const match = textBefore.match(/(?:dv\.pages|db\.query)\(([^)]*)$/);
         const query = match?.[1]?.replace(/["']/g, '') ?? '';
@@ -387,7 +370,6 @@ export class AutocompleteEngine {
         };
       }
 
-      // 2. DOM Selectors in db.renderList(), db.bindFilter(), $(), $$(), or any '#id' / '.class'
       const selectorFnMatch = textBefore.match(/(?:\$|\$\$|querySelector|querySelectorAll|renderList|bindFilter)\(\s*['"]([#.]?[a-zA-Z0-9_-]*)$/);
       const hashOrDotMatch = textBefore.match(/['"]([#.][a-zA-Z0-9_-]*)$/);
       const selectorMatch = selectorFnMatch || hashOrDotMatch;
@@ -424,10 +406,8 @@ export class AutocompleteEngine {
         };
       }
 
-      // 3. Ignore normal strings
       if (this.isInsideString(textBefore)) return { suggestions: [], startOffset: 0 };
 
-      // 4. Member Access after dot (.)
       const dotMatch = textBefore.match(/([a-zA-Z0-9_$]+)\.([a-zA-Z0-9_$]*)$/);
       if (dotMatch) {
         const objName = dotMatch[1];
@@ -475,40 +455,26 @@ export class AutocompleteEngine {
           };
         }
 
-        const commonMethods = [
-          'map()', 'filter()', 'forEach()', 'find()', 'includes()', 'slice()', 'join()', 
-          'length', 'push()', 'reduce()', 'some()', 'every()', 'sort()', 'reverse()', 
-          'indexOf()', 'split()', 'trim()', 'replace()', 'toLowerCase()', 'toUpperCase()'
-        ];
         return {
           startOffset: propQuery.length,
           suggestions: this.cleanSuggestions([
             ...this.dynamicFrontmatterKeys.map(k => ({ text: k, type: 'prop' as const })),
-            ...commonMethods.map(m => ({ text: m, type: 'builtin' as const }))
+            ...COMMON_METHODS.map(m => ({ text: m, type: 'builtin' as const }))
           ], propQuery)
         };
       }
 
-      // 5. Top-Level Scope (Keywords, User Variables & Functions)
       const tokenMatch = textBefore.match(/([a-zA-Z0-9_$]+)$/);
       if (tokenMatch) {
         const query = tokenMatch[1] ?? '';
         const { vars: userVars, fns: userFns } = this.extractUserJsSymbols(fullBuffer);
-
-        const jsTopLevel = [
-          'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 
-          'async', 'await', 'new', 'class', 'switch', 'case', 'break', 'try', 'catch', 
-          'finally', 'throw', 'typeof', 'instanceof', 'true', 'false', 'null', 'undefined', 
-          'this', 'window', 'document', 'console', 'db', 'dv', 'app', '$', '$$', 
-          'Math', 'JSON', 'Promise', 'setTimeout', 'setInterval', 'localStorage'
-        ];
 
         return {
           startOffset: query.length,
           suggestions: this.cleanSuggestions([
             ...userVars.map(v => ({ text: v, type: 'var' as const, weight: 95 })),
             ...userFns.map(f => ({ text: `${f}()`, displayText: f, type: 'fn' as const, weight: 95 })),
-            ...jsTopLevel.map(k => ({ text: k, type: 'kw' as const }))
+            ...JS_TOP_LEVEL.map(k => ({ text: k, type: 'kw' as const }))
           ], query)
         };
       }
