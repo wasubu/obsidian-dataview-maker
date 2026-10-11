@@ -3,79 +3,181 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Custom Database Studio - Introduction</title>
-  <link rel="stylesheet" href="style.css"> <!-- Optional shared CSS, or use inline below -->
+  <title>Custom Database Studio - Documentation</title>
+  
+  <!-- Highlight.js Theme -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
   <style>
     :root {
-      --bg-base: #11111b; --bg-sidebar: #181825; --bg-card: #1e1e2e; --bg-code: #181825;
+      --bg-base: #11111b; --bg-sidebar: #181825; --bg-card: #1e1e2e; --bg-code: #1e1e2e;
       --accent: #cba6f7; --text-main: #cdd6f4; --text-muted: #a6adc8; --border: #313244;
-      --success: #a6e3a1; --code-tag: #89b4fa;
+      --code-tag: #89b4fa;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-base); color: var(--text-main); display: flex; min-height: 100vh; }
     
-    aside { width: 280px; background: var(--bg-sidebar); border-right: 1px solid var(--border); position: fixed; top: 0; bottom: 0; left: 0; overflow-y: auto; padding: 30px 20px; }
-    aside h2 { font-size: 1.1rem; color: var(--accent); margin-bottom: 20px; text-transform: uppercase; }
-    aside ul { list-style: none; }
-    aside li { margin-bottom: 10px; }
-    aside a { color: var(--text-muted); text-decoration: none; font-size: 0.95rem; display: block; padding: 8px 12px; border-radius: 6px; transition: all 0.2s; }
-    aside a:hover, aside a.active { color: var(--text-main); background: var(--border); }
-    aside a.active { color: var(--accent); font-weight: 600; border-left: 3px solid var(--accent); }
+    /* SIDEBAR STYLING */
+    aside { 
+      width: 280px; 
+      background: var(--bg-sidebar); 
+      border-right: 1px solid var(--border); 
+      position: fixed; 
+      top: 0; 
+      bottom: 0; 
+      left: 0; 
+      height: 100vh;
+      overflow-y: auto; 
+      padding: 30px 20px; 
+      z-index: 100;
+    }
+    aside h2 { font-size: 1.1rem; color: var(--accent); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
+    aside ul { list-style: none; padding: 0; margin: 0; }
+    aside li { margin-bottom: 8px; }
+    aside a { 
+      color: var(--text-muted); 
+      text-decoration: none; 
+      font-size: 0.95rem; 
+      display: block; 
+      padding: 8px 12px; 
+      border-radius: 6px; 
+      transition: all 0.2s ease; 
+      cursor: pointer;
+    }
+    aside a:hover { 
+      color: var(--text-main); 
+      background: var(--border); 
+    }
+    aside a.active { 
+      color: var(--accent); 
+      background: rgba(203, 166, 247, 0.1); 
+      font-weight: 600; 
+      border-left: 3px solid var(--accent); 
+    }
 
-    main { margin-left: 280px; flex: 1; padding: 60px 80px; max-width: 1000px; }
+    /* CENTRAL WINDOW CONTENT AREA */
+    main { 
+      margin-left: 280px; 
+      flex: 1; 
+      padding: 60px 80px; 
+      max-width: 1000px; 
+    }
     h1 { font-size: 2.8rem; color: var(--accent); margin-bottom: 10px; }
     .subtitle { font-size: 1.2rem; color: var(--text-muted); margin-bottom: 40px; }
     section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 40px; margin-bottom: 40px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
     h2 { font-size: 1.8rem; color: var(--accent); margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
     p, li { color: var(--text-muted); margin-bottom: 14px; }
-    ul { padding-left: 20px; }
+    main ul { padding-left: 20px; }
     strong { color: var(--text-main); }
-    code { font-family: monospace; background: var(--bg-code); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 0.9rem; border: 1px solid var(--border); }
+    
+/* Code block overrides for Highlight.js */
+    pre { 
+      background: #11111b !important; 
+      border: 1px solid var(--border); 
+      border-radius: 8px; 
+      padding: 20px; 
+      overflow-x: auto; 
+      margin: 20px 0; 
+    }
+    code.hljs {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+      font-size: 0.9rem;
+      padding: 0;
+      background: transparent !important; /* Removes the theme's built-in background */
+    }
+
     .badge { display: inline-block; background: rgba(203,166,247,0.15); color: var(--accent); border: 1px solid var(--accent); padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; margin-bottom: 20px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 20px; }
     .card { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
-    .card h4 { color: var(--success); margin-bottom: 8px; }
+    .card h4 { color: var(--accent); margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; background: var(--bg-code); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    th { background: rgba(49, 50, 68, 0.5); color: var(--text-main); font-weight: 600; }
+    td { color: var(--text-muted); }
+    td code { color: var(--code-tag); }
+
+    /* RESPONSIVE */
+    @media (max-width: 900px) {
+      aside { width: 100%; height: auto; position: relative; }
+      main { margin-left: 0; padding: 20px; }
+      body { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
 
+  <!-- Persistent Sidebar -->
   <aside>
-    <h2>Documentation</h2>
-    <ul>
-      <li><a href="index.html" class="active">1. Introduction</a></li>
-      <li><a href="getting-started.html">2. Getting Started</a></li>
-      <li><a href="db-api.html">3. The `db` API Reference</a></li>
-      <li><a href="book-catalog.html">4. Tutorial: Book Catalog</a></li>
-      <li><a href="pong-tutorial.html">5. Tutorial: Retro Pong</a></li>
-      <li><a href="db-helpers.html">6. Tutorial: Habit Tracker & State</a></li>
+    <h2>Documentation kk</h2>
+    <ul id="nav-links">
+      <!-- Dynamically generated via pages.json -->
     </ul>
   </aside>
 
-  <main>
-    <div class="badge">Official Guide</div>
-    <h1>Custom Database Studio</h1>
-    <p class="subtitle">Turn static Obsidian markdown notes into fully interactive mini-apps, databases, and custom visual dashboards.</p>
-
-    <section>
-      <h2>Welcome to the Studio</h2>
-      <p><strong>Custom Database Studio</strong> is an advanced plugin for Obsidian designed to bridge the gap between static markdown notes and dynamic applications. By embedding a <code>```canvasview</code> codeblock in your note, you gain access to a fully isolated runtime environment where standard <strong>HTML</strong> templates, <strong>CSS</strong> stylesheets, and <strong>JavaScript</strong> logic execute with native Obsidian integration.</p>
-      
-      <div class="grid">
-        <div class="card">
-          <h4>⚡ Live Hot-Reloading</h4>
-          <p>Instantly preview your HTML/CSS/JS edits in real-time as you type in the Studio workspace.</p>
-        </div>
-        <div class="card">
-          <h4>🧠 Smart Autocomplete</h4>
-          <p>Context-aware suggestions for vault folders, tags, frontmatter keys, HTML tags, CSS properties, and `db` methods.</p>
-        </div>
-        <div class="card">
-          <h4>📦 Delta Versioning</h4>
-          <p>Save multiple versions (`v0`, `v1`, etc.) of your scripts directly inside plugin data with rollback support.</p>
-        </div>
-      </div>
-    </section>
+  <!-- Central Dynamic Window -->
+  <main id="content-window">
+    <p>Loading documentation...</p>
   </main>
+
+  <script>
+    async function initNavigation() {
+      try {
+        const res = await fetch('pages.json');
+        const pages = await res.json();
+        
+        const navContainer = document.getElementById('nav-links');
+        navContainer.innerHTML = '';
+
+        pages.forEach((page, index) => {
+          const li = document.createElement('li');
+          const a = document.createElement('a');
+          a.setAttribute('data-page', page.file);
+          a.textContent = page.title;
+          
+          if (index === 0) {
+            a.classList.add('active');
+            loadPage(page.file); // Load first page on boot
+          }
+          
+          a.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelectorAll('#nav-links a').forEach(l => l.classList.remove('active'));
+            a.classList.add('active');
+            loadPage(page.file);
+          });
+
+          li.appendChild(a);
+          navContainer.appendChild(li);
+        });
+      } catch (err) {
+        console.error("Failed to load navigation from pages.json", err);
+      }
+    }
+
+    async function loadPage(pageFile) {
+      try {
+        const response = await fetch(pageFile);
+        if (!response.ok) throw new Error('Page not found');
+        const html = await response.text();
+        
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const mainContent = doc.querySelector('main') || doc.body;
+        
+        document.getElementById('content-window').innerHTML = mainContent.innerHTML;
+        
+        // Trigger syntax highlighting on all code blocks in the newly loaded page
+        hljs.highlightAll();
+        
+        window.scrollTo(0, 0);
+      } catch (err) {
+        document.getElementById('content-window').innerHTML = '<h2>Error 404</h2><p>Could not load tutorial page.</p>';
+      }
+    }
+
+    initNavigation();
+  </script>
 
 </body>
 </html>

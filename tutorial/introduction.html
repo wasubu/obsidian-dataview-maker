@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Introduction - Custom Database Studio</title>
+</head>
+<body>
+  <main>
+    <div class="badge">Official Guide &bull; Section 1</div>
+    <h1>Introduction</h1>
+    <p class="subtitle">Turn static Obsidian markdown notes into fully interactive mini-apps, databases, and custom visual dashboards.</p>
+
+    <!-- SECTION 1 -->
+    <section>
+      <h2>Welcome to Custom Database Studio</h2>
+      <p><strong>Custom Database Studio</strong> is an advanced, developer-grade plugin for Obsidian designed to completely redefine how you interact with your notes. By embedding a custom <code>```canvasview</code> codeblock in any markdown note, you gain access to a fully isolated, high-performance runtime environment where standard <strong>HTML5</strong> templates, <strong>CSS3</strong> stylesheets, and <strong>ES6+ JavaScript</strong> logic execute with native Obsidian vault integration.</p>
+      
+      <div class="grid">
+        <div class="card">
+          <h4>⚡ Live Hot-Reloading</h4>
+          <p>Instantly preview your HTML, CSS, and JS edits in real-time as you type inside the multi-pane Studio workspace.</p>
+        </div>
+        <div class="card">
+          <h4>🧠 Smart Autocomplete</h4>
+          <p>Context-aware suggestions for vault folders, tags, frontmatter keys, HTML tags, CSS properties, and custom `db` methods.</p>
+        </div>
+        <div class="card">
+          <h4>📦 Delta Versioning</h4>
+          <p>Save multiple incremental snapshots (`v0`, `v1`, etc.) of your scripts directly inside plugin data with robust rollback support.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2 -->
+    <section>
+      <h2>The Core Philosophy & Vision</h2>
+      <p>Traditional note-taking systems are fundamentally static. While standard markdown lists and tables work well for writing text, they fall short when you want to build interactive tools like personal CRMs, dynamic project trackers, visual book catalogs, habit dashboards, or custom calculators.</p>
+      
+      <p>While tools like <em>Dataview</em> allow you to query notes into tables and lists, they lack user interactivity, responsive card layouts, custom animations, and state management. <strong>Custom Database Studio</strong> solves this by giving you a complete front-end development workspace right inside your vault, powered by your own vault notes as the database.</p>
+
+      <ul>
+        <li><strong>Zero Build Tools:</strong> No external Node.js servers, Webpack configurations, or compilation steps required. Everything runs natively inside Obsidian.</li>
+        <li><strong>Secure & Sandboxed:</strong> Scripts execute within a controlled DOM container (`container`), ensuring your dashboard never interferes with other notes or plugins.</li>
+        <li><strong>Vault as a Database:</strong> Every note in your vault is a potential database record, complete with frontmatter properties, tags, and links.</li>
+      </ul>
+    </section>
+
+    <!-- SECTION 3 -->
+    <section>
+      <h2>How It Compares</h2>
+      <p>Understanding where Custom Database Studio fits in the Obsidian ecosystem will help you leverage its maximum potential:</p>
+      
+      <table>
+        <tr>
+          <th>Feature</th>
+          <th>Standard Markdown</th>
+          <th>Dataview Plugin</th>
+          <th>Custom Database Studio</th>
+        </tr>
+        <tr>
+          <td><strong>Interactivity</strong></td>
+          <td>Static text</td>
+          <td>Read-only tables/lists</td>
+          <td>Full JavaScript DOM apps</td>
+        </tr>
+        <tr>
+          <td><strong>UI Design</strong></td>
+          <td>Basic tables</td>
+          <td>Markdown tables</td>
+          <td>Custom CSS grids, cards, buttons</td>
+        </tr>
+        <tr>
+          <td><strong>Data Source</strong></td>
+          <td>Manual typing</td>
+          <td>Vault queries</td>
+          <td>Vault queries + LocalStorage state</td>
+        </tr>
+        <tr>
+          <td><strong>Animations / Audio</strong></td>
+          <td>None</td>
+          <td>None</td>
+          <td>60FPS canvas loops & Web Audio</td>
+        </tr>
+      </table>
+    </section>
+
+    <!-- SECTION 4 -->
+    <section>
+      <h2>Under the Hood: Architecture Overview</h2>
+      <p>Custom Database Studio is engineered with a robust, multi-layered architecture ensuring that code tested in the Studio workspace behaves 100% identically when rendered in Reading Mode across your vault:</p>
+
+      <ul>
+        <li><strong>The Studio View (`view.ts`):</strong> A dedicated Obsidian workspace leaf providing split-screen editors for HTML, CSS, and JS, featuring syntax highlighting, error banners, and code linting.</li>
+        <li><strong>The Shared Runtime (`runtime.ts`):</strong> A universal helper engine that injects the <code>db</code> API suite into both the live Studio simulation preview and Reading Mode codeblock processors.</li>
+        <li><strong>Bulletproof Teardown:</strong> Automatically cleans up lingering animation loops (`requestAnimationFrame`), active timers, keyboard event listeners, and Web Audio contexts the moment you close a note or switch tabs, preventing memory leaks and audio bleeding.</li>
+      </ul>
+    </section>
+
+    <!-- SECTION 5 -->
+    <section>
+      <h2>Glossary of Key Terms</h2>
+      <p>As you explore this documentation, you will encounter a few recurring technical terms:</p>
+      
+      <ul>
+        <li><code>CanvasView</code> &mdash; The custom markdown codeblock identifier (<code>```canvasview</code>) parsed by the plugin.</li>
+        <li><code>db API</code> &mdash; The global utility object providing 18+ methods for vault querying, note creation, UI rendering, modals, and animations.</li>
+        <li><code>Delta Versioning</code> &mdash; A memory-efficient snapshot system that records only the changed lines between code iterations rather than duplicating entire files.</li>
+        <li><code>Scoped Selectors ($ / $$)</code> &mdash; Container-scoped query selectors that prevent your dashboard CSS and JS from affecting the rest of Obsidian.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

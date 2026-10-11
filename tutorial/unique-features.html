@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Advanced DB & Runtime Features - Custom Database Studio</title>
+</head>
+<body>
+  <main>
+    <div class="badge">Official Guide &bull; Section 7</div>
+    <h1>Advanced DB & Runtime Features</h1>
+    <p class="subtitle">Master container-scoped DOM selectors, reactive state stores, procedural audio, and the complete `db` API suite.</p>
+
+    <!-- SECTION 1 -->
+    <section>
+      <h2>Complete `db` Method Reference</h2>
+      <p>Custom Database Studio injects a robust global <code>db</code> object into your scripts. Here is the exhaustive list of all available helper functions:</p>
+      
+      <table>
+        <tr>
+          <th>Method</th>
+          <th>Category</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td><code>db.query(source, fallback)</code></td>
+          <td>Data</td>
+          <td>Queries Dataview pages with automatic fallback to native Obsidian folders.</td>
+        </tr>
+        <tr>
+          <td><code>db.createNote(opts)</code></td>
+          <td>Data</td>
+          <td>Creates a markdown note with frontmatter and optional auto-opening.</td>
+        </tr>
+        <tr>
+          <td><code>db.updateNote(fileOrPath, fn)</code></td>
+          <td>Data</td>
+          <td>Atomically processes frontmatter properties safely using Obsidian's file queue.</td>
+        </tr>
+        <tr>
+          <td><code>db.increment(path, prop, by)</code></td>
+          <td>Data</td>
+          <td>Increments a numeric frontmatter property by a given amount.</td>
+        </tr>
+        <tr>
+          <td><code>db.toggleProp(path, prop)</code></td>
+          <td>Data</td>
+          <td>Inverts a boolean frontmatter property.</td>
+        </tr>
+        <tr>
+          <td><code>db.openNote(path)</code></td>
+          <td>Navigation</td>
+          <td>Opens a vault note in an active workspace leaf.</td>
+        </tr>
+        <tr>
+          <td><code>db.renderList(...)</code></td>
+          <td>UI</td>
+          <td>Populates a container element by mapping items through a template function.</td>
+        </tr>
+        <tr>
+          <td><code>db.bindFilter(...)</code></td>
+          <td>UI</td>
+          <td>Generates a button filter bar and handles active state toggling.</td>
+        </tr>
+        <tr>
+          <td><code>db.modal(title, renderFn)</code></td>
+          <td>UI</td>
+          <td>Spawns a native-themed Obsidian popup modal with a close button and backdrop.</td>
+        </tr>
+        <tr>
+          <td><code>db.notify(msg, timeout)</code></td>
+          <td>UI</td>
+          <td>Triggers a native Obsidian toast notification notice.</td>
+        </tr>
+        <tr>
+          <td><code>db.drag(target, moveFn, endFn)</code></td>
+          <td>Interaction</td>
+          <td>Binds touch and mouse pointer drag handlers to any element or selector.</td>
+        </tr>
+        <tr>
+          <td><code>db.onKey(keys, fn, options)</code></td>
+          <td>Interaction</td>
+          <td>Binds a scoped window keydown listener that cleans up on note unload.</td>
+        </tr>
+        <tr>
+          <td><code>db.canvas(selector)</code></td>
+          <td>Graphics</td>
+          <td>Sets up a High-DPI / Retina-aware HTML5 Canvas context.</td>
+        </tr>
+        <tr>
+          <td><code>db.loop(fn)</code></td>
+          <td>Animation</td>
+          <td>Manages a high-performance 60FPS animation loop (`requestAnimationFrame`).</td>
+        </tr>
+        <tr>
+          <td><code>db.timer(intervalMs, fn)</code></td>
+          <td>Timers</td>
+          <td>Creates a managed interval timer that auto-stops when the note unloads.</td>
+        </tr>
+        <tr>
+          <td><code>db.state(initial, onChange)</code></td>
+          <td>State</td>
+          <td>Creates a reactive state store with `.val`, `.update()`, and `.subscribe()`.</td>
+        </tr>
+        <tr>
+          <td><code>db.storage(namespace)</code></td>
+          <td>Storage</td>
+          <td>Provides namespaced persistent local storage (`get`, `set`, `remove`, `clear`).</td>
+        </tr>
+        <tr>
+          <td><code>db.beep(freq, dur, type, vol)</code></td>
+          <td>Audio</td>
+          <td>Synthesizes procedural audio using the Web Audio API with auto-teardown.</td>
+        </tr>
+        <tr>
+          <td><code>db.onVaultChange(fn)</code></td>
+          <td>Events</td>
+          <td>Listens for vault modification events on markdown files.</td>
+        </tr>
+        <tr>
+          <td><code>db.onCleanup(fn)</code></td>
+          <td>Lifecycle</td>
+          <td>Registers custom teardown logic to execute when the note is closed or reloaded.</td>
+        </tr>
+      </table>
+    </section>
+
+    <!-- SECTION 2 -->
+    <section>
+      <h2>Container-Scoped DOM Selectors: `$` and `$$`</h2>
+      <p>When writing scripts in traditional web development, calling <code>document.querySelector()</code> searches the entire webpage. In Obsidian, this is dangerous because it could accidentally modify Obsidian's own UI elements or other notes on the screen.</p>
+      
+      <p>Custom Database Studio automatically provides scoped helper functions <code>$</code> and <code>$$</code> inside your script:</p>
+      
+      <pre><code class="language-javascript">// Selects the first matching element INSIDE your canvas container
+const button = $('#my-submit-btn');
+
+// Selects ALL matching elements INSIDE your canvas container
+const allCards = $$('.book-card');
+
+allCards.forEach(card => {
+  card.style.borderColor = 'var(--interactive-accent)';
+});</code></pre>
+      <p>This guarantees your CSS queries and DOM manipulations remain strictly isolated to your dashboard.</p>
+    </section>
+
+    <!-- SECTION 3 -->
+    <section>
+      <h2>Reactive State Stores (`db.state`)</h2>
+      <p>Building dashboards often requires UI components to update automatically whenever data changes. The <code>db.state()</code> helper creates a reactive state container with built-in subscription handling:</p>
+
+      <pre><code class="language-javascript">// Initialize reactive state with an initial value and change listener
+const counter = db.state(0, (newValue) => {
+  console.log('State changed to:', newValue);
+  $('#counter-label').innerText = newValue;
+});
+
+// Get the current value
+console.log(counter.val); // 0
+
+// Set a new value (triggers the listener automatically)
+counter.val = 5;
+
+// Update using previous state
+counter.update(prev => prev + 1);</code></pre>
+    </section>
+
+    <!-- SECTION 4 -->
+    <section>
+      <h2>Persistent Namespaced Storage (`db.storage`)</h2>
+      <p>To save user settings, preferences, or local dashboard data that survives Obsidian restarts, use <code>db.storage()</code>. It automatically prefixes keys with your plugin's namespace (<code>cds_[namespace]_[key]</code>) to prevent collisions:</p>
+
+      <pre><code class="language-javascript">// Initialize namespaced storage
+const store = db.storage('my_dashboard');
+
+// Save data
+store.set('theme_pref', 'dark');
+store.set('favorites', [1, 4, 9]);
+
+// Retrieve data with an optional default fallback
+const theme = store.get('theme_pref', 'light');
+
+// Remove a key or clear all namespaced keys
+store.remove('theme_pref');
+store.clear();</code></pre>
+    </section>
+
+    <!-- SECTION 5 -->
+    <section>
+      <h2>Procedural Audio Synthesis (`db.beep`)</h2>
+      <p>Add rich interactive feedback to buttons, timers, or games without needing external audio files. <code>db.beep()</code> utilizes the browser's Web Audio API and includes bulletproof auto-closing teardown:</p>
+
+      <pre><code class="language-javascript">// Basic sine beep (Frequency 440Hz, Duration 0.1s)
+db.beep(440, 0.1, 'sine', 0.1);
+
+// Retro square wave click for buttons
+db.beep(800, 0.05, 'square', 0.05);
+
+// Low error buzz (Sawtooth wave)
+db.beep(120, 0.2, 'sawtooth', 0.15);</code></pre>
+    </section>
+
+    <!-- SECTION 6 -->
+    <section>
+      <h2>Managed Timers & Animation Loops</h2>
+      <p>Creating setInterval timers or requestAnimationFrame loops in vanilla JS often leads to memory leaks or audio bleeding when switching away from a note. Custom Database Studio manages these automatically:</p>
+
+      <pre><code class="language-javascript">// 1. Managed Interval Timer (Auto-stops on note unload)
+const countdown = db.timer(1000, () => {
+  console.log('Ticked every second');
+});
+countdown.start();
+
+// 2. High-Performance 60FPS Animation Loop
+const animator = db.loop((deltaTime, timestamp) => {
+  updatePhysics(deltaTime);
+  renderCanvas();
+});
+animator.start();</code></pre>
+    </section>
+
+    <!-- SECTION 7 -->
+    <section>
+      <h2>Vault Event Listeners & Teardown Hooks</h2>
+      <p>You can listen to vault modifications or register custom cleanup functions that execute when your canvas view is destroyed:</p>
+
+      <pre><code class="language-javascript">// Listen for any markdown file modification in your vault
+db.onVaultChange((file) => {
+  console.log('Note modified:', file.path);
+});
+
+// Register custom cleanup logic (unbinding custom window listeners, sockets, etc.)
+db.onCleanup(() => {
+  console.log('Canvas view is being unloaded. Cleaning up...');
+});</code></pre>
+    </section>
+
+  </main>
+</body>
+</html>
