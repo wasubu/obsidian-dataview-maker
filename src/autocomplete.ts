@@ -244,7 +244,7 @@ export class AutocompleteEngine {
 
     const { classes: htmlClasses, ids: htmlIds } = this.extractHtmlTokens(htmlCode);
 
-    // =========================================================================
+// =========================================================================
     // HTML Context
     // =========================================================================
     if (mode === 'html') {
@@ -259,6 +259,7 @@ export class AutocompleteEngine {
       const inSingleQuotes = (tagContent.match(/'/g) || []).length % 2 === 1;
       if (inDoubleQuotes || inSingleQuotes) return { suggestions: [], startOffset: 0 };
 
+      // Tag name (<di|)
       const tagMatch = tagContent.match(/^<([a-zA-Z0-9-]*)$/);
       if (tagMatch) {
         const query = tagMatch[1] ?? '';
@@ -278,7 +279,8 @@ export class AutocompleteEngine {
         };
       }
 
-      const attrMatch = tagContent.match(/\s+([a-zA-Z0-9-]*)$/);
+      // Attribute (<div cl|) -> REQUIRES AT LEAST 1 LETTER (stops space/backspace triggers)
+      const attrMatch = tagContent.match(/\s+([a-zA-Z0-9-]+)$/);
       if (attrMatch) {
         const query = attrMatch[1] ?? '';
         return {
@@ -307,9 +309,7 @@ export class AutocompleteEngine {
       const lastCloseBrace = textBefore.lastIndexOf('}');
       const isInsideRule = lastOpenBrace > lastCloseBrace;
 
-      // 1. SELECTOR SCOPE (Outside { }): Suggest HTML Classes & IDs
       if (!isInsideRule) {
-        // Typing dot (.) in selector: suggest HTML classes
         const classMatch = textBefore.match(/\.([a-zA-Z0-9_-]*)$/);
         if (classMatch) {
           const query = classMatch[1] ?? '';
@@ -322,7 +322,6 @@ export class AutocompleteEngine {
           };
         }
 
-        // Typing hash (#) in selector: suggest HTML IDs
         const idMatch = textBefore.match(/#([a-zA-Z0-9_-]*)$/);
         if (idMatch) {
           const query = idMatch[1] ?? '';
@@ -338,24 +337,29 @@ export class AutocompleteEngine {
         return { suggestions: [], startOffset: 0 };
       }
 
-      // 2. PROPERTY / VALUE SCOPE (Inside { })
+      // Inside { }
       const ruleContent = textBefore.substring(lastOpenBrace);
       const isValueScope = ruleContent.lastIndexOf(':') > ruleContent.lastIndexOf(';');
 
+      // Value Scope (display: fl|) -> REQUIRES AT LEAST 1 LETTER
       if (isValueScope) {
-        const valMatch = textBefore.match(/:\s*([a-zA-Z0-9-]*)$/);
-        const query = valMatch ? (valMatch[1] ?? '') : '';
-        const cssValues = ['flex', 'grid', 'inline-flex', 'block', 'inline-block', 'none', 'center', 'pointer', 'absolute', 'relative', 'fixed', 'inherit', 'wrap', 'nowrap', 'space-between', 'space-around'];
-        return {
-          startOffset: query.length,
-          suggestions: this.cleanSuggestions([
-            ...cssValues.map(v => ({ text: `${v};`, displayText: v, type: 'css-val' as const })),
-            ...this.dynamicCssVariables.map(v => ({ text: `var(${v});`, displayText: v, type: 'css-var' as const }))
-          ], query)
-        };
+        const valMatch = textBefore.match(/:\s*([a-zA-Z0-9-]+)$/);
+        if (valMatch) {
+          const query = valMatch[1] ?? '';
+          const cssValues = ['flex', 'grid', 'inline-flex', 'block', 'inline-block', 'none', 'center', 'pointer', 'absolute', 'relative', 'fixed', 'inherit', 'wrap', 'nowrap', 'space-between', 'space-around'];
+          return {
+            startOffset: query.length,
+            suggestions: this.cleanSuggestions([
+              ...cssValues.map(v => ({ text: `${v};`, displayText: v, type: 'css-val' as const })),
+              ...this.dynamicCssVariables.map(v => ({ text: `var(${v});`, displayText: v, type: 'css-var' as const }))
+            ], query)
+          };
+        }
+        return { suggestions: [], startOffset: 0 };
       }
 
-      const propMatch = textBefore.match(/([a-zA-Z-]*)$/);
+      // Property Scope (dis|) -> REQUIRES AT LEAST 1 LETTER (stops space/backspace triggers)
+      const propMatch = textBefore.match(/([a-zA-Z-]+)$/);
       if (propMatch) {
         const query = propMatch[1] ?? '';
         return {
