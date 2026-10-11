@@ -120,19 +120,27 @@ export class AutocompleteEngine {
   }
 
   /**
-   * Extracts user declared variables, constants, and functions from JS code
-   */
+     * Extracts user declared variables, constants, and functions from JS code
+     */
   extractUserJsSymbols(jsCode: string): { vars: string[], fns: string[] } {
     const vars = new Set<string>();
     const fns = new Set<string>();
 
-    const declMatches = jsCode.matchAll(/\b(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g);
+    // Strip out comments and strings so we never extract ghost variables from comments/text
+    const cleanCode = jsCode
+      .replace(/\/\*[\s\S]*?\*\/|([^:]|^)\/\/.*/g, '$1') // remove comments
+      .replace(/`[\s\S]*?`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '""'); // remove strings
+
+    // const X, let X, var X
+    const declMatches = cleanCode.matchAll(/\b(?:const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g);
     for (const m of declMatches) if (m[1]) vars.add(m[1]);
 
-    const fnMatches = jsCode.matchAll(/\bfunction\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g);
+    // function myFunc()
+    const fnMatches = cleanCode.matchAll(/\bfunction\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/g);
     for (const m of fnMatches) if (m[1]) fns.add(m[1]);
 
-    const paramMatches = jsCode.matchAll(/\(([a-zA-Z_$,\s]+)\)\s*=>/g);
+    // (param1, param2) =>
+    const paramMatches = cleanCode.matchAll(/\(([a-zA-Z_$,\s]+)\)\s*=>/g);
     for (const m of paramMatches) {
       if (m[1]) {
         m[1].split(',').forEach(p => {
@@ -142,7 +150,8 @@ export class AutocompleteEngine {
       }
     }
 
-    const forMatches = jsCode.matchAll(/\bfor\s*\(\s*(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s+(?:of|in)\b/g);
+    // for (let item of items)
+    const forMatches = cleanCode.matchAll(/\bfor\s*\(\s*(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s+(?:of|in)\b/g);
     for (const m of forMatches) if (m[1]) vars.add(m[1]);
 
     return { vars: Array.from(vars), fns: Array.from(fns) };
