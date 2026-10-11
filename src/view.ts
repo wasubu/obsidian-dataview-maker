@@ -274,23 +274,47 @@ export class StudioView extends ItemView {
         };
       },
 
-    // 8. Native Obsidian Modal Popup (Fixed scope to this.app)
-        modal: (title: string, renderFn: (bodyEl: HTMLElement, close: () => void) => void) => {
-        const modalInstance = new (class extends Modal {
-            constructor(app: any) {
-            super(app);
-            }
-            onOpen() {
-            this.titleEl.setText(title);
-            renderFn(this.contentEl, () => this.close());
-            }
-            onClose() {
-            this.contentEl.empty();
-            }
-        })(this.app);
-        modalInstance.open();
-        return modalInstance;
-        },
+      // 8. Native-Themed DOM Modal Popup (Matches exported notes and supports preview cleanup)
+    modal: (title: string, renderFn: (bodyEl: HTMLElement, close: () => void) => void) => {
+      const backdrop = document.createElement("div");
+      backdrop.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;";
+
+      const modalEl = document.createElement("div");
+      // Adjust border-radius here to change box roundness (e.g., 8px for sharper, 16px for rounder)
+      modalEl.style.cssText = "background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-interface);color:var(--text-normal);";
+
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--background-modifier-border);font-weight:600;font-size:1rem;";
+      header.innerText = title;
+
+      const closeBtn = document.createElement("button");
+      closeBtn.innerHTML = "&times;";
+      closeBtn.style.cssText = "background:transparent;border:none;outline:none;box-shadow:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background 0.1s, color 0.1s;";
+      closeBtn.onmouseenter = () => { closeBtn.style.background = "var(--background-modifier-hover)"; closeBtn.style.color = "var(--text-normal)"; };
+      closeBtn.onmouseleave = () => { closeBtn.style.background = "transparent"; closeBtn.style.color = "var(--text-muted)"; };
+
+      const close = () => {
+        backdrop.remove();
+      };
+
+      closeBtn.onclick = close;
+      backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+      header.appendChild(closeBtn);
+      modalEl.appendChild(header);
+
+      const bodyEl = document.createElement("div");
+      bodyEl.style.cssText = "padding:16px;overflow-y:auto;flex:1;";
+      modalEl.appendChild(bodyEl);
+
+      backdrop.appendChild(modalEl);
+      document.body.appendChild(backdrop);
+
+      // Auto-teardown integration via your preview cleanup registry
+      this.previewCleanups.push(close);
+
+      renderFn(bodyEl, close);
+      return { close, el: modalEl };
+    },
 
       // 9. Drag & Touch Pointer Handler
       drag: (target: HTMLElement | string, onMove: (dx: number, dy: number, e: PointerEvent) => void, onEnd?: () => void) => {
@@ -1495,18 +1519,20 @@ export class StudioView extends ItemView {
           '  },',
           '  modal: (title, renderFn) => {',
           '    const backdrop = document.createElement("div");',
-          '    backdrop.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;";',
+          '    backdrop.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;";',
           '',
           '    const modalEl = document.createElement("div");',
-          '    modalEl.style.cssText = "background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.3);width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-interface);color:var(--text-normal);";',
+          '    modalEl.style.cssText = "background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:15px;box-shadow:0 8px 24px rgba(0,0,0,0.12);width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-interface);color:var(--text-normal);";',
           '',
           '    const header = document.createElement("div");',
           '    header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--background-modifier-border);font-weight:600;font-size:1rem;";',
           '    header.innerText = title;',
           '',
           '    const closeBtn = document.createElement("button");',
-          '    closeBtn.innerText = "×";',
-          '    closeBtn.style.cssText = "background:none;border:none;color:var(--text-muted);font-size:1.4rem;cursor:pointer;padding:0 4px;";',
+          '    closeBtn.innerHTML = "&times;";',
+          '    closeBtn.style.cssText = "background:transparent;border:none;outline:none;box-shadow:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background 0.1s, color 0.1s;";',
+          '    closeBtn.onmouseenter = () => { closeBtn.style.background = "var(--background-modifier-hover)"; closeBtn.style.color = "var(--text-normal)"; };',
+          '    closeBtn.onmouseleave = () => { closeBtn.style.background = "transparent"; closeBtn.style.color = "var(--text-muted)"; };',
           '',
           '    const close = () => {',
           '      backdrop.remove();',
