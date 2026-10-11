@@ -78,8 +78,17 @@ noteSimWrapper.addEventListener("click", (event) => {
       // BULLETPROOF TEARDOWN (Fixes audio bleeding on tab close)
       // =========================================================================
       let isDestroyed = false;
+      const runtimeId = Math.random().toString(36).slice(2, 8);
+      console.log("[CDS] Runtime created:", runtimeId);
       const triggerTeardown = () => {
         if (isDestroyed) return;
+
+    console.warn(
+        "[CDS] Teardown triggered",
+        "Wrapper connected:",
+        noteSimWrapper.isConnected
+      );
+
         isDestroyed = true;
 
         // 1. Stop all animation loops, timers, and unbind keyboard listeners
@@ -96,17 +105,6 @@ noteSimWrapper.addEventListener("click", (event) => {
         }
       };
 
-      let isInitialized = false;
-      setTimeout(() => { isInitialized = true; }, 300);
-
-      const observer = new MutationObserver(() => {
-        if (!isInitialized) return;
-        if (!noteSimWrapper.isConnected || !document.body.contains(noteSimWrapper)) {
-          observer.disconnect();
-          triggerTeardown();
-        }
-      });
-      observer.observe(noteSimWrapper.parentNode || document.body, { childList: true, subtree: true });
 
       const $ = (sel: string) => noteSimWrapper.querySelector(sel);
       const $$ = (sel: string) => noteSimWrapper.querySelectorAll(sel);
@@ -119,25 +117,92 @@ noteSimWrapper.addEventListener("click", (event) => {
           let running = false;
           let lastTime: number | null = null;
 
+          let frameCount = 0;
           const frame = (time: number) => {
-            if (!running || isDestroyed) return;
-            const delta = lastTime !== null ? (time - lastTime) : 0;
+            if (!running || isDestroyed) {
+              rafId = null;
+              return;
+            }
+
+            frameCount++;
+
+            if (frameCount === 1 || frameCount % 120 === 0) {
+              const canvases = Array.from(
+                noteSimWrapper.querySelectorAll("canvas")
+              ).map(canvas => {
+                const rect = canvas.getBoundingClientRect();
+
+                return {
+                  connected: canvas.isConnected,
+                  width: rect.width,
+                  height: rect.height
+                };
+              });
+
+              console.log("[CDS] RAF heartbeat", {
+                runtimeId,
+                frameCount,
+                wrapperConnected: noteSimWrapper.isConnected,
+                isDestroyed,
+                canvases
+              });
+            }
+
+            const delta = lastTime !== null ? time - lastTime : 0;
             lastTime = time;
-            fn(delta, time);
-            if (running && !isDestroyed) rafId = requestAnimationFrame(frame);
+            rafId = null;
+
+            try {
+              fn(delta, time);
+            } catch (error) {
+              console.error(
+                "[CDS] Animation loop crashed; stopped safely:",
+                error
+              );
+
+              running = false;
+              lastTime = null;
+              return;
+            }
+
+            if (running && !isDestroyed) {
+              rafId = requestAnimationFrame(frame);
+            }
           };
 
           const start = () => {
-            if (running || isDestroyed) return controller;
+            if (running || isDestroyed) {
+              console.warn("[CDS] Loop start ignored:", {
+                runtimeId,
+                running,
+                isDestroyed
+              });
+              return controller;
+            }
+
             running = true;
             lastTime = null;
+
+            console.log("[CDS] Loop started:", runtimeId);
+
             rafId = requestAnimationFrame(frame);
             return controller;
           };
 
           const stop = () => {
+            console.warn("[CDS] Loop stopped:", {
+              runtimeId,
+              running,
+              isDestroyed
+            });
+
             running = false;
-            if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+
+            if (rafId !== null) {
+              cancelAnimationFrame(rafId);
+              rafId = null;
+            }
+
             return controller;
           };
 
@@ -599,7 +664,9 @@ if (noteSimWrapper.isConnected) {
 
       ctx.addChild(new (class extends MarkdownRenderChild {
         constructor(containerEl: HTMLElement) { super(containerEl); }
-        onunload() { triggerTeardown(); }
+        onunload() {
+          triggerTeardown();
+        }
       })(noteSimWrapper));
     });
 
