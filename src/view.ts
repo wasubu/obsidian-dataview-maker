@@ -3,7 +3,7 @@ import { ItemView, WorkspaceLeaf, Notice, TFile, EventRef } from 'obsidian';
 import CustomDatabaseStudioPlugin, { VersionSnapshot } from './main';
 import { VersionPromptModal, ConfirmModal } from './modals';
 import { AutocompleteEngine, AutocompleteSuggestion } from './autocomplete';
-import { createRuntimeEnvironment } from './runtime';
+import { createRuntimeEnvironment } from './db_api';
 
 export const VIEW_TYPE_STUDIO = "custom-database-studio-view";
 

@@ -1,7 +1,7 @@
 // main.ts
 import { Plugin, Notice, MarkdownRenderChild, TFile } from 'obsidian';
 import { StudioView, VIEW_TYPE_STUDIO } from './view';
-import { createRuntimeEnvironment } from './runtime';
+import { createRuntimeEnvironment } from './db_api';
 
 export interface VersionSnapshot {
   tag: string;
