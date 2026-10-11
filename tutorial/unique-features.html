@@ -21,7 +21,7 @@
   <main>
     <div class="badge">Official Guide &bull; Section 7</div>
     <h1>Advanced DB & Runtime Features</h1>
-    <p class="subtitle">Complete fact-checked reference of the 20+ runtime helpers provided by <code>runtime.ts</code>. Click any method in the table below to jump directly to its details.</p>
+    <p class="subtitle">Complete fact-checked reference of the 23+ runtime helpers provided by <code>runtime.ts</code>. Click any method in the table below to jump directly to its details.</p>
 
     <!-- SECTION 1 -->
     <section>
@@ -53,6 +53,11 @@
           <td><code>db.updateNote(fileOrPath, fn)</code></td>
           <td>Vault</td>
           <td>Atomically queues and processes frontmatter updates.</td>
+        </tr>
+        <tr>
+          <td><a href="#section-readnote"><code>db.readNote(path)</code></a></td>
+          <td>Vault</td>
+          <td>Reads and returns the raw markdown text of any vault note.</td>
         </tr>
         <tr>
           <td><code>db.increment(path, prop, by)</code></td>
@@ -90,6 +95,11 @@
           <td>Triggers an Obsidian toast notification notice (`new Notice()`).</td>
         </tr>
         <tr>
+          <td><a href="#section-confetti"><code>db.confetti(x, y, type)</code></a></td>
+          <td>UI / Effects</td>
+          <td>Triggers particle particle bursts (`burst`, `fireworks`, `fountain`).</td>
+        </tr>
+        <tr>
           <td><a href="#section-drag"><code>db.drag(target, moveFn, endFn)</code></a></td>
           <td>Interaction</td>
           <td>Binds touch and mouse pointer drag tracking.</td>
@@ -113,6 +123,11 @@
           <td><code>db.loop(fn)</code></td>
           <td>Animation</td>
           <td>Manages a 60FPS animation controller (`start`, `stop`, `toggle`, `isRunning`).</td>
+        </tr>
+        <tr>
+          <td><a href="#section-debounce"><code>db.debounce(fn, delayMs)</code></a></td>
+          <td>Utilities</td>
+          <td>Limits function execution rate for search inputs and rapid events.</td>
         </tr>
         <tr>
           <td><code>db.timer(intervalMs, fn)</code></td>
@@ -168,6 +183,50 @@ if (setup) {
     </section>
 
     <!-- SECTION 3 -->
+    <section id="section-readnote">
+      <h2>Reading Vault Notes (`db.readNote`)</h2>
+      <p>Complementing <code>db.createNote()</code> and <code>db.updateNote()</code>, <code>db.readNote()</code> allows you to fetch the raw markdown string of any note in your vault asynchronously:</p>
+
+      <pre><code class="language-javascript">async function loadNotePreview() {
+  const markdownText = await db.readNote("Notes/Journal.md");
+  if (markdownText) {
+    $('#preview-box').innerText = markdownText;
+  }
+}
+loadNotePreview();</code></pre>
+    </section>
+
+    <!-- SECTION 4 -->
+    <section id="section-debounce">
+      <h2>Function Debouncing (`db.debounce`)</h2>
+      <p>Prevent expensive operations (like live search filters or API requests) from firing on every single keystroke by wrapping them in <code>db.debounce()</code>:</p>
+
+      <pre><code class="language-javascript">// Create a debounced search handler (waits 300ms after last keystroke)
+const handleSearch = db.debounce((query) => {
+  console.log("Searching vault for:", query);
+  const results = db.query(query);
+}, 300);
+
+// Attach to search input
+$('#search-input').oninput = (e) => handleSearch(e.target.value);</code></pre>
+    </section>
+
+    <!-- SECTION 5 -->
+    <section id="section-confetti">
+      <h2>Visual Particle Effects (`db.confetti`)</h2>
+      <p>Celebrate game victories, task completions, or milestones using <code>db.confetti()</code>. It supports 4 distinct visual styles: <code>'burst'</code>, <code>'fireworks'</code> and <code>'fountain'</code>:</p>
+
+      <pre><code class="language-javascript">// 1. Radial explosion at specific coordinates (e.g. click event)
+db.confetti(e.clientX, e.clientY, 'burst');
+
+// 2. Fireworks shoot up from the bottom and explode
+db.confetti(window.innerWidth / 2, 200, 'fireworks');
+
+// 3. Upward celebration spray fountain
+db.confetti(150, 300, 'fountain');
+    </section>
+
+    <!-- SECTION 6 -->
     <section id="section-drag">
       <h2>Pointer Drag Handler (`db.drag`)</h2>
       <p>Easily make UI elements draggable using pointer events that seamlessly support both mouse and touch input:</p>
@@ -181,7 +240,7 @@ db.drag('#draggable-box', (dx, dy, e) => {
 });</code></pre>
     </section>
 
-    <!-- SECTION 4 -->
+    <!-- SECTION 7 -->
     <section id="section-onkey">
       <h2>Scoped Keyboard Listeners (`db.onKey` & `db.onKeyUp`)</h2>
       <p>Listen for specific keyboard shortcuts, key presses, and key releases scoped to your view (with automatic unbinding when switching tabs or closing the note):</p>
@@ -204,7 +263,7 @@ db.onKey(' ', (e) => {
 });</code></pre>
     </section>
 
-    <!-- SECTION 5 -->
+    <!-- SECTION 8 -->
     <section id="section-state">
       <h2>Reactive State Stores (`db.state`)</h2>
       <p>The <code>db.state()</code> helper creates a reactive state container with built-in subscription handling:</p>
@@ -217,7 +276,7 @@ counter.val = 5; // Triggers change listener
 counter.update(prev => prev + 1); // Increments to 6</code></pre>
     </section>
 
-    <!-- SECTION 6 -->
+    <!-- SECTION 9 -->
     <section id="section-storage">
       <h2>Persistent Namespaced Storage (`db.storage`)</h2>
       <p>Save local dashboard data that survives Obsidian restarts using namespaced local storage:</p>
