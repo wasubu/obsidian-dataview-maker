@@ -41,7 +41,7 @@ export class StudioView extends ItemView {
   }
 
   /**
-   * Universal DataviewJS Runtime Helpers (Domain-Agnostic)
+   * Universal CanvasView Runtime Helpers (Domain-Agnostic)
    */
   getRuntimeHelpers(containerEl: HTMLElement, htmlContent: string) {
     const app = this.app;
@@ -111,15 +111,18 @@ export class StudioView extends ItemView {
         const ctx = canvasEl.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
 
-        const logicalWidth = canvasEl.width;
-        const logicalHeight = canvasEl.height;
+        const logicalWidth = canvasEl.clientWidth || canvasEl.width || 300;
+        const logicalHeight = canvasEl.clientHeight || canvasEl.height || 150;
+        const targetW = Math.round(logicalWidth * dpr);
+        const targetH = Math.round(logicalHeight * dpr);
 
-        canvasEl.width = logicalWidth * dpr;
-        canvasEl.height = logicalHeight * dpr;
-        canvasEl.style.width = `${logicalWidth}px`;
-        canvasEl.style.height = `${logicalHeight}px`;
-
-        if (ctx) ctx.scale(dpr, dpr);
+        if (canvasEl.width !== targetW || canvasEl.height !== targetH) {
+          canvasEl.width = targetW;
+          canvasEl.height = targetH;
+          canvasEl.style.width = `${logicalWidth}px`;
+          canvasEl.style.height = `${logicalHeight}px`;
+          if (ctx) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(dpr, dpr); }
+        }
 
         return {
           canvas: canvasEl,
@@ -274,47 +277,45 @@ export class StudioView extends ItemView {
         };
       },
 
-      // 8. Native-Themed DOM Modal Popup (Matches exported notes and supports preview cleanup)
-    modal: (title: string, renderFn: (bodyEl: HTMLElement, close: () => void) => void) => {
-      const backdrop = document.createElement("div");
-      backdrop.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;";
+      // 8. Native-Themed DOM Modal Popup
+      modal: (title: string, renderFn: (bodyEl: HTMLElement, close: () => void) => void) => {
+        const backdrop = document.createElement("div");
+        backdrop.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;";
 
-      const modalEl = document.createElement("div");
-      // Adjust border-radius here to change box roundness (e.g., 8px for sharper, 16px for rounder)
-      modalEl.style.cssText = "background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-interface);color:var(--text-normal);";
+        const modalEl = document.createElement("div");
+        modalEl.style.cssText = "background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-interface);color:var(--text-normal);";
 
-      const header = document.createElement("div");
-      header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--background-modifier-border);font-weight:600;font-size:1rem;";
-      header.innerText = title;
+        const header = document.createElement("div");
+        header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--background-modifier-border);font-weight:600;font-size:1rem;";
+        header.innerText = title;
 
-      const closeBtn = document.createElement("button");
-      closeBtn.innerHTML = "&times;";
-      closeBtn.style.cssText = "background:transparent;border:none;outline:none;box-shadow:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background 0.1s, color 0.1s;";
-      closeBtn.onmouseenter = () => { closeBtn.style.background = "var(--background-modifier-hover)"; closeBtn.style.color = "var(--text-normal)"; };
-      closeBtn.onmouseleave = () => { closeBtn.style.background = "transparent"; closeBtn.style.color = "var(--text-muted)"; };
+        const closeBtn = document.createElement("button");
+        closeBtn.innerHTML = "&times;";
+        closeBtn.style.cssText = "background:transparent;border:none;outline:none;box-shadow:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background 0.1s, color 0.1s;";
+        closeBtn.onmouseenter = () => { closeBtn.style.background = "var(--background-modifier-hover)"; closeBtn.style.color = "var(--text-normal)"; };
+        closeBtn.onmouseleave = () => { closeBtn.style.background = "transparent"; closeBtn.style.color = "var(--text-muted)"; };
 
-      const close = () => {
-        backdrop.remove();
-      };
+        const close = () => {
+          backdrop.remove();
+        };
 
-      closeBtn.onclick = close;
-      backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
-      header.appendChild(closeBtn);
-      modalEl.appendChild(header);
+        closeBtn.onclick = close;
+        backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+        header.appendChild(closeBtn);
+        modalEl.appendChild(header);
 
-      const bodyEl = document.createElement("div");
-      bodyEl.style.cssText = "padding:16px;overflow-y:auto;flex:1;";
-      modalEl.appendChild(bodyEl);
+        const bodyEl = document.createElement("div");
+        bodyEl.style.cssText = "padding:16px;overflow-y:auto;flex:1;";
+        modalEl.appendChild(bodyEl);
 
-      backdrop.appendChild(modalEl);
-      document.body.appendChild(backdrop);
+        backdrop.appendChild(modalEl);
+        document.body.appendChild(backdrop);
 
-      // Auto-teardown integration via your preview cleanup registry
-      this.previewCleanups.push(close);
+        this.previewCleanups.push(close);
 
-      renderFn(bodyEl, close);
-      return { close, el: modalEl };
-    },
+        renderFn(bodyEl, close);
+        return { close, el: modalEl };
+      },
 
       // 9. Drag & Touch Pointer Handler
       drag: (target: HTMLElement | string, onMove: (dx: number, dy: number, e: PointerEvent) => void, onEnd?: () => void) => {
@@ -444,34 +445,33 @@ export class StudioView extends ItemView {
         }
       },
 
-// 14. Robust updateNote (accepts string path OR TFile object, with race-condition queue)
-    updateNote: (() => {
-      const queues = new Map<string, Promise<any>>();
-      return async (fileOrPath: TFile | string, updater: (frontmatter: Record<string, any>) => void): Promise<boolean> => {
-        const file = typeof fileOrPath === 'string' 
-          ? app.vault.getAbstractFileByPath(fileOrPath) 
-          : fileOrPath;
-          
-        if (!(file instanceof TFile)) {
-          new Notice("Update error: Active file not found");
-          return false;
-        }
-
-        const path = file.path;
-        const prev = queues.get(path) || Promise.resolve();
-        const current = prev.then(async () => {
-          try {
-            await app.fileManager.processFrontMatter(file, updater);
-            return true;
-          } catch (err: any) {
-            new Notice(`Update error: ${err.message}`);
+      updateNote: (() => {
+        const queues = new Map<string, Promise<any>>();
+        return async (fileOrPath: TFile | string, updater: (frontmatter: Record<string, any>) => void): Promise<boolean> => {
+          const file = typeof fileOrPath === 'string' 
+            ? app.vault.getAbstractFileByPath(fileOrPath) 
+            : fileOrPath;
+            
+          if (!(file instanceof TFile)) {
+            new Notice("Update error: Active file not found");
             return false;
           }
-        });
-        queues.set(path, current);
-        return current;
-      };
-    })(),
+
+          const path = file.path;
+          const prev = queues.get(path) || Promise.resolve();
+          const current = prev.then(async () => {
+            try {
+              await app.fileManager.processFrontMatter(file, updater);
+              return true;
+            } catch (err: any) {
+              new Notice(`Update error: ${err.message}`);
+              return false;
+            }
+          });
+          queues.set(path, current);
+          return current;
+        };
+      })(),
 
       renderList: (selector: string, items: any[], templateFn: (item: any) => string, emptyHtml = '<div class="cds-empty">No items found</div>') => {
         const target = containerEl.querySelector(selector);
@@ -1018,6 +1018,7 @@ export class StudioView extends ItemView {
       }
     };
     document.addEventListener('pointerdown', onOutsideClick);
+    this.previewCleanups.push(() => document.removeEventListener('pointerdown', onOutsideClick));
 
     renderGutterAndHighlight();
 
@@ -1085,11 +1086,11 @@ export class StudioView extends ItemView {
 
     (async () => {
       fileSelect.empty();
-      fileSelect.createEl('option', { text: '-- Select DataviewJS Note --', attr: { value: '' } });
+      fileSelect.createEl('option', { text: '-- Select CanvasView Note --', attr: { value: '' } });
       for (const file of this.app.vault.getMarkdownFiles()) {
         try {
           const content = await this.app.vault.cachedRead(file);
-          if (content.includes('dataviewjs')) {
+          if (content.includes('canvasview') || content.includes('dataviewjs')) {
             fileSelect.createEl('option', { text: file.path, attr: { value: file.path } });
           }
         } catch (e) {}
@@ -1220,27 +1221,37 @@ export class StudioView extends ItemView {
         this.currentFile = file;
         const content = await this.app.vault.read(file);
 
-        const match = content.match(/```dataviewjs([\s\S]*?)```/);
-        if (match && match[1]) {
-          const code = match[1];
+        const match = content.match(/```(canvasview|dataviewjs)([\s\S]*?)```/);
+        if (match && match[2]) {
+          const code = match[2];
 
-          const cssMatch = code.match(/style(?:El)?\.innerHTML\s*=\s*`([\s\S]*?)`;/);
-          cssCode = cssMatch && cssMatch[1] ? cssMatch[1] : "";
+          const cssMatch = code.match(/\/\/ --- CSS ---([\s\S]*?)(?=\/\/ --- HTML ---|\/\/ --- JS ---|$)/);
+          cssCode = cssMatch && cssMatch[1] ? cssMatch[1].trim() : "";
           cssEditor.setValue(cssCode);
 
-          const htmlMatch = code.match(/const\s+htmlContent\s*=\s*`([\s\S]*?)`;/);
-          htmlCode = htmlMatch && htmlMatch[1] ? htmlMatch[1] : "";
+          const htmlMatch = code.match(/\/\/ --- HTML ---([\s\S]*?)(?=\/\/ --- JS ---|$)/);
+          htmlCode = htmlMatch && htmlMatch[1] ? htmlMatch[1].trim() : "";
           htmlEditor.setValue(htmlCode);
 
-          const jsSplit = code.split('// --- JS ---');
-          if (jsSplit[1]) {
-            jsCode = jsSplit[1].trim();
+          const jsMatch = code.match(/\/\/ --- JS ---([\s\S]*)$/);
+          if (jsMatch && jsMatch[1]) {
+            jsCode = jsMatch[1].trim();
           } else {
-            jsCode = code.trim();
+            // Fallback parsing for older legacy format
+            const styleMatch = code.match(/styleEl\.innerHTML\s*=\s*`([\s\S]*?)`;/);
+            if (styleMatch && styleMatch[1] && !cssCode) cssCode = styleMatch[1].trim();
+            
+            const htmlContentMatch = code.match(/const\s+htmlContent\s*=\s*`([\s\S]*?)`;/);
+            if (htmlContentMatch && htmlContentMatch[1] && !htmlCode) htmlCode = htmlContentMatch[1].trim();
+
+            const jsSplit = code.split('// --- JS ---');
+            jsCode = jsSplit[1] ? jsSplit[1].trim() : code.trim();
           }
+          cssEditor.setValue(cssCode);
+          htmlEditor.setValue(htmlCode);
           jsEditor.setValue(jsCode);
         } else {
-          jsCode = content;
+          jsCode = content.trim();
           jsEditor.setValue(jsCode);
         }
 
@@ -1386,275 +1397,14 @@ export class StudioView extends ItemView {
         return;
       }
       try {
-        const uniqueId = `cds-style-${this.currentFile.basename.replace(/[^a-zA-Z0-9_-]/g, '')}`;
-
-        const activeStyleEl = document.getElementById(uniqueId) as HTMLStyleElement | null;
-        if (activeStyleEl) {
-          activeStyleEl.innerHTML = cssCode;
-        }
-
         const wrappedContent = [
-          "```dataviewjs",
+          "```canvasview",
           "// --- CSS ---",
-          `const styleId = "${uniqueId}";`,
-          'let styleEl = document.getElementById(styleId);',
-          'if (!styleEl) {',
-          '  styleEl = document.createElement("style");',
-          '  styleEl.id = styleId;',
-          '  document.head.appendChild(styleEl);',
-          '}',
-          `styleEl.innerHTML = \`${cssCode}\`;`,
-          '',
-          "// --- CLEANUP REGISTRY ---",
-          'if (window.__cds_cleanups && window.__cds_cleanups[styleId]) {',
-          '  window.__cds_cleanups[styleId].forEach(fn => { try { fn(); } catch(e) {} });',
-          '}',
-          'window.__cds_cleanups = window.__cds_cleanups || {};',
-          'window.__cds_cleanups[styleId] = [];',
-          '',
+          cssCode,
+          "",
           "// --- HTML ---",
-          `const htmlContent = \`${htmlCode}\`;`,
-          '',
-          "// --- UNIVERSAL HELPERS ---",
-          'const container = this.container;',
-          'container.innerHTML = htmlContent;',
-          'const $ = (s) => container.querySelector(s);',           'const $$ = (s) => container.querySelectorAll(s);',
-          'const db = {',
-          '  onCleanup: (fn) => { window.__cds_cleanups[styleId].push(fn); },',
-          '  loop: (fn) => {',
-          '    let rafId = null, running = false, lastTime = null;',
-          '    const frame = (time) => {',
-          '      if (!running) return;',
-          '      const delta = lastTime !== null ? (time - lastTime) : 0;',
-          '      lastTime = time;',
-          '      fn(delta, time);',
-          '      if (running) rafId = requestAnimationFrame(frame);',
-          '    };',
-          '    const ctrl = {',
-          '      start: () => { if (!running) { running = true; lastTime = null; rafId = requestAnimationFrame(frame); } return ctrl; },',
-          '      stop: () => { running = false; if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; } return ctrl; },',
-          '      toggle: () => { if (running) { ctrl.stop(); return false; } else { ctrl.start(); return true; } },',
-          '      get isRunning() { return running; }',
-          '    };',
-          '    window.__cds_cleanups[styleId].push(() => ctrl.stop());',
-          '    return ctrl;',
-          '  },',
-          '  canvas: (sel) => {',
-          '    const c = typeof sel === "string" ? container.querySelector(sel) : sel;',
-          '    if (!c || !c.getContext) return null;',
-          '    const ctx = c.getContext("2d");',
-          '    const dpr = window.devicePixelRatio || 1;',
-          '    const lw = c.width, lh = c.height;',
-          '    c.width = lw * dpr; c.height = lh * dpr;',
-          '    c.style.width = `${lw}px`; c.style.height = `${lh}px`;',
-          '    if (ctx) ctx.scale(dpr, dpr);',
-          '    return {',
-          '      canvas: c, ctx, width: lw, height: lh,',
-          '      clear: (col) => { if (!ctx) return; if (col) { ctx.fillStyle = col; ctx.fillRect(0,0,lw,lh); } else { ctx.clearRect(0,0,lw,lh); } }',
-          '    };',
-          '  },',
-          '  onKey: (keys, fn, opts) => {',
-          '    const isFn = typeof keys === "function";',
-          '    const cb = isFn ? keys : fn;',
-          '    const list = isFn ? null : (Array.isArray(keys) ? keys.map(k => k.toLowerCase()) : [keys.toLowerCase()]);',
-          '    const h = (e) => { if (!list || list.includes(e.key.toLowerCase()) || list.includes(e.code.toLowerCase())) cb(e); };',
-          '    window.addEventListener("keydown", h, opts);',
-          '    const unbind = () => window.removeEventListener("keydown", h, opts);',
-          '    window.__cds_cleanups[styleId].push(unbind);',
-          '    return unbind;',
-          '  },',
-          '  beep: (freq = 440, dur = 0.1, type = "sine", vol = 0.1) => {',
-          '    try {',
-          '      const AC = window.AudioContext || window.webkitAudioContext;',
-          '      if (!AC) return;',
-          '      if (!window.__cds_audio_ctx || window.__cds_audio_ctx.state === "closed") window.__cds_audio_ctx = new AC();',
-          '      const aCtx = window.__cds_audio_ctx;',
-          '      if (aCtx.state === "suspended") aCtx.resume();',
-          '      const d = dur > 10 ? dur / 1000 : dur;',
-          '      const osc = aCtx.createOscillator();',
-          '      const gain = aCtx.createGain();',
-          '      osc.type = type; osc.frequency.setValueAtTime(freq, aCtx.currentTime);',
-          '      gain.gain.setValueAtTime(vol, aCtx.currentTime);',
-          '      gain.gain.exponentialRampToValueAtTime(0.0001, aCtx.currentTime + d);',
-          '      osc.connect(gain); gain.connect(aCtx.destination);',
-          '      osc.start(); osc.stop(aCtx.currentTime + d);',
-          '    } catch (e) {}',
-          '  },',
-          '  storage: (ns = "default") => {',
-          '    const p = `cds_${ns}_`;',
-          '    return {',
-          '      get: (k, def) => { try { const v = localStorage.getItem(p + k); return v === null ? def : JSON.parse(v); } catch(e) { return def; } },',
-          '      set: (k, v) => { try { localStorage.setItem(p + k, JSON.stringify(v)); } catch(e) {} },',
-          '      remove: (k) => { try { localStorage.removeItem(p + k); } catch(e) {} },',
-          '      clear: () => {',
-          '        try {',
-          '          const rem = [];',
-          '          for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(p)) rem.push(k); }',
-          '          rem.forEach(k => localStorage.removeItem(k));',
-          '        } catch(e) {}',
-          '      }',
-          '    };',
-          '  },',
-          '  timer: (ms, fn) => {',
-          '    let id = null, run = false;',
-          '    const ctrl = {',
-          '      start: () => { if (!run) { run = true; id = setInterval(fn, ms); } return ctrl; },',
-          '      stop: () => { run = false; if (id) { clearInterval(id); id = null; } return ctrl; },',
-          '      toggle: () => (run ? ctrl.stop() : ctrl.start()),',
-          '      get isRunning() { return run; }',
-          '    };',
-          '    window.__cds_cleanups[styleId].push(() => ctrl.stop());',
-          '    return ctrl;',
-          '  },',
-          '  state: (init, onChange) => {',
-          '    let cur = init;',
-          '    const subs = [];',
-          '    if (onChange) subs.push(onChange);',
-          '    return {',
-          '      get val() { return cur; },',
-          '      set val(n) { cur = n; subs.forEach(s => s(cur)); },',
-          '      update: (u) => { cur = u(cur); subs.forEach(s => s(cur)); return cur; },',
-          '      subscribe: (s) => { subs.push(s); s(cur); }',
-          '    };',
-          '  },',
-          '  modal: (title, renderFn) => {',
-          '    const backdrop = document.createElement("div");',
-          '    backdrop.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;";',
-          '',
-          '    const modalEl = document.createElement("div");',
-          '    modalEl.style.cssText = "background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:15px;box-shadow:0 8px 24px rgba(0,0,0,0.12);width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-interface);color:var(--text-normal);";',
-          '',
-          '    const header = document.createElement("div");',
-          '    header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--background-modifier-border);font-weight:600;font-size:1rem;";',
-          '    header.innerText = title;',
-          '',
-          '    const closeBtn = document.createElement("button");',
-          '    closeBtn.innerHTML = "&times;";',
-          '    closeBtn.style.cssText = "background:transparent;border:none;outline:none;box-shadow:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background 0.1s, color 0.1s;";',
-          '    closeBtn.onmouseenter = () => { closeBtn.style.background = "var(--background-modifier-hover)"; closeBtn.style.color = "var(--text-normal)"; };',
-          '    closeBtn.onmouseleave = () => { closeBtn.style.background = "transparent"; closeBtn.style.color = "var(--text-muted)"; };',
-          '',
-          '    const close = () => {',
-          '      backdrop.remove();',
-          '    };',
-          '',
-          '    closeBtn.onclick = close;',
-          '    backdrop.onclick = (e) => { if (e.target === backdrop) close(); };',
-          '    header.appendChild(closeBtn);',
-          '    modalEl.appendChild(header);',
-          '',
-          '    const bodyEl = document.createElement("div");',
-          '    bodyEl.style.cssText = "padding:16px;overflow-y:auto;flex:1;";',
-          '    modalEl.appendChild(bodyEl);',
-          '',
-          '    backdrop.appendChild(modalEl);',
-          '    document.body.appendChild(backdrop);',
-          '',
-          '    if (window.__cds_cleanups && window.__cds_cleanups[styleId]) {',
-          '      window.__cds_cleanups[styleId].push(close);',
-          '    }',
-          '',
-          '    renderFn(bodyEl, close);',
-          '    return { close, el: modalEl };',
-          '  },',
-          '  drag: (target, onMove, onEnd) => {',
-          '    const el = typeof target === "string" ? container.querySelector(target) : target;',
-          '    if (!el) return;',
-          '    let sx = 0, sy = 0;',
-          '    const mv = (e) => onMove(e.clientX - sx, e.clientY - sy, e);',
-          '    const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); if (onEnd) onEnd(); };',
-          '    const dn = (e) => { sx = e.clientX; sy = e.clientY; window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up); };',
-          '    el.addEventListener("pointerdown", dn);',
-          '    window.__cds_cleanups[styleId].push(() => { el.removeEventListener("pointerdown", dn); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); });',
-          '  },',
-          '  notify: (msg, dur = 4000) => { new Notice(msg, dur); },',
-          '  onVaultChange: (fn) => {',
-          '    const ref = app.vault.on("modify", (f) => { if (f instanceof TFile) fn(f); });',
-          '    const unbind = () => app.vault.offref(ref);',
-          '    window.__cds_cleanups[styleId].push(unbind);',
-          '    return unbind;',
-          '  },',
-          '  increment: async (p, prop, by = 1) => {',
-          '    return db.updateNote(p, (fm) => { fm[prop] = (Number(fm[prop]) || 0) + by; });',
-          '  },',
-          '  toggleProp: async (p, prop) => {',
-          '    return db.updateNote(p, (fm) => { fm[prop] = !fm[prop]; });',
-          '  },',
-          '  frontmatter: async (fileOrPath, fn) => { return db.updateNote(fileOrPath, fn); },',
-          '  query: (src, def = []) => {',
-          '    try {',
-          '      const p = (dv && dv.pages) ? dv.pages(src) : null;',
-          '      if (p && p.length > 0) return p.map(x => ({',
-          '        ...x,',
-          '        name: x.file?.name || x.file?.basename || "Untitled",',
-          '        title: x.file?.name || x.file?.basename || x.title || "Untitled",',
-          '        path: x.file?.path || "#",',
-          '        tags: x.file?.tags || []',
-          '      })).values;',
-          '    } catch (e) {}',
-          '    return def;',
-          '  },',
-          '  openNote: (p) => { if (p && p !== "#") app.workspace.openLinkText(p, "", false); },',
-          '  createNote: async (opt) => {',
-          '    let f = opt.folder ? opt.folder.replace(/^\\/+|\\/+$/g, "") : "";',
-          '    let n = opt.name || opt.title || opt.frontmatter?.title || "Untitled";',
-          '    if (f && !app.vault.getAbstractFileByPath(f)) await app.vault.createFolder(f);',
-          '    let path = f ? `${f}/${n}.md` : `${n}.md`; let c = 1;',
-          '    let finalName = n;',
-          '    while (app.vault.getAbstractFileByPath(path)) { finalName = `${n} ${c}`; path = f ? `${f}/${finalName}.md` : `${finalName}.md`; c++; }',
-          '    let fm = { ...(opt.frontmatter || {}) };',
-          '    if (fm.title === n || !fm.title) fm.title = finalName;',
-          '    let y = Object.keys(fm).length > 0 ? "---\\n" + Object.entries(fm).map(([k,v]) => `${k}: ${JSON.stringify(v)}`).join("\\n") + "\\n---\\n\\n" : "";',
-          '    let file = await app.vault.create(path, y + (opt.content || `# ${finalName}\\n\\n`));',
-          '    if (opt.open !== false) await app.workspace.getLeaf().openFile(file);',
-          '    return file;',
-          '  },',
-          '  updateNote: (() => {',
-          '    const queues = new Map();',
-          '    return async (fileOrPath, fn) => {',
-          '      let f = fileOrPath;',
-          '      if (typeof fileOrPath === "string") {',
-          '        f = app.vault.getAbstractFileByPath(fileOrPath);',
-          '      } else if (fileOrPath && fileOrPath.file?.path) {',
-          '        f = app.vault.getAbstractFileByPath(fileOrPath.file.path);',
-          '      } else if (fileOrPath && fileOrPath.path) {',
-          '        f = app.vault.getAbstractFileByPath(fileOrPath.path);',
-          '      }',
-          '      if (!f || typeof f.path !== "string") {',
-          '        new Notice("Update error: Target file not found");',
-          '        return false;',
-          '      }',
-          '      const path = f.path;',
-          '      const prev = queues.get(path) || Promise.resolve();',
-          '      const current = prev.then(async () => {',
-          '        try {',
-          '          await app.fileManager.processFrontMatter(f, fn);',
-          '          return true;',
-          '        } catch (err) {',
-          '          new Notice(`Update error: ${err.message}`);',
-          '          return false;',
-          '        }',
-          '      });',
-          '      queues.set(path, current);',
-          '      return current;',
-          '    };',
-          '  })(),',
-          '  renderList: (sel, items, fn, empty = "<div>No items found</div>") => {',
-          '    const el = $(sel); if (!el) return;',
-          '    el.innerHTML = (items && items.length) ? items.map(fn).join("") : empty;',
-          '  },',
-          '  bindFilter: (sel, opts, onSel) => {',
-          '    const bar = $(sel); if (!bar) return; bar.innerHTML = ""; let act = opts[0] || "All";',
-          '    opts.forEach(o => {',
-          '      const b = document.createElement("button"); b.className = `filter-btn ${o === act ? "active" : ""}`; b.innerText = o;',
-          '      b.onclick = () => { act = o; bar.querySelectorAll(".filter-btn").forEach(x => x.classList.remove("active")); b.classList.add("active"); onSel(o); };',
-          '      bar.appendChild(b);',
-          '    });',
-          '    onSel(act);',
-          '  }',
-          '};',
-          'window.db = db;',
-          '',
+          htmlCode,
+          "",
           "// --- JS ---",
           jsCode,
           "```"
