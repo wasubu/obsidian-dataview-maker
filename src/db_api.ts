@@ -810,135 +810,119 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       return results;
     },
 
-// 5. Renders real Obsidian markdown with race-condition safety & compact dashboard spacing
-    markdownToHtml: async (
-      markdownText: string,
-      targetEl: HTMLElement | string
-    ): Promise<void> => {
-      if (isDestroyed()) return;
-      const el = typeof targetEl === 'string' ? containerEl.querySelector(targetEl) as HTMLElement : targetEl;
-      if (!el || !(el instanceof HTMLElement)) return;
+markdownToHtml: async (
+  markdownText: string,
+  targetEl: HTMLElement
+): Promise<void> => {
+  if (isDestroyed() || !targetEl) return;
 
-      // Inject strict compact layout rules once per runtime
-      if (!document.getElementById('cds-markdown-styles')) {
-        const styleEl = document.createElement('style');
-        styleEl.id = 'cds-markdown-styles';
-        styleEl.textContent = `
-          .markdown-rendered.cds-compact {
-            line-height: 1.35 !important;
-          }
-          /* Nuclear margin reset for widget compactness */
-          .markdown-rendered.cds-compact * {
-            margin-top: 0 !important;
-            margin-bottom: 0.2em !important;
-            margin-left: 0 !important;
-            margin-right: 0 !important;
-          }
-          .markdown-rendered.cds-compact h1, 
-          .markdown-rendered.cds-compact h2, 
-          .markdown-rendered.cds-compact h3, 
-          .markdown-rendered.cds-compact h4 {
-            margin-top: 0.4em !important;
-            margin-bottom: 0.15em !important;
-          }
-          .markdown-rendered.cds-compact .callout {
-            margin: 0.3em 0 !important;
-            padding: 6px 10px !important;
-          }
-        `;
-        document.head.appendChild(styleEl);
-        cleanups.push(() => styleEl.remove());
+  const renders = (db as any)._markdownRenders as
+    | WeakMap<HTMLElement, { component: Component; id: number }>
+    | undefined;
+
+  const renderMap =
+    renders ??
+    new WeakMap<HTMLElement, { component: Component; id: number }>();
+
+  (db as any)._markdownRenders = renderMap;
+
+  // Invalidate and unload any previous render for this target.
+  const previous = renderMap.get(targetEl);
+  if (previous) {
+    renderMap.delete(targetEl);
+    previous.component.unload();
+  }
+
+  const component = new Component();
+  component.load();
+
+  const id = Date.now() + Math.random();
+  renderMap.set(targetEl, { component, id });
+
+  const stagingEl = document.createElement("div");
+
+  const isCurrentRender = () => {
+    const current = renderMap.get(targetEl);
+    return (
+      !isDestroyed() &&
+      targetEl.isConnected &&
+      current?.id === id
+    );
+  };
+
+  const sourcePath =
+    app.workspace.getActiveFile()?.path ?? "";
+
+  try {
+    await MarkdownRenderer.render(
+      app,
+      markdownText,
+      stagingEl,
+      sourcePath,
+      component
+    );
+
+    if (!isCurrentRender()) {
+      component.unload();
+      return;
+    }
+
+    targetEl.classList.add("cds-markdown-preview");
+
+    // Replace the previous rendered Markdown.
+    targetEl.replaceChildren(...Array.from(stagingEl.childNodes));
+
+    // Inject styles scoped exclusively to this preview.
+    const styleEl = document.createElement("style");
+    styleEl.textContent = `
+      .cds-markdown-preview {
+        white-space: normal;
+        min-width: 0;
+        box-sizing: border-box;
       }
 
-      // Add required Obsidian theme classes + compact modifier
-      el.classList.add('markdown-rendered', 'cds-compact');
-
-      // Track the active render for each target element.
-      const renders = (db as any)._markdownRenders as
-        | WeakMap<HTMLElement, { component: Component; id: number }>
-        | undefined;
-
-      const renderMap =
-        renders ??
-        new WeakMap<
-          HTMLElement,
-          { component: Component; id: number }
-        >();
-
-      (db as any)._markdownRenders = renderMap;
-
-      // Invalidate and unload any previous render for this target.
-      const previous = renderMap.get(el);
-      if (previous) {
-        renderMap.delete(el);
-        previous.component.unload();
+      .cds-markdown-preview :is(
+        h1, h2, h3, h4, h5, h6,
+        p, ul, ol, li, blockquote, td, th
+      ) {
+        white-space: normal;
       }
 
-      const component = new Component();
-      component.load();
-
-      const id = Date.now() + Math.random();
-
-      renderMap.set(el, { component, id });
-
-      // Render into a staging element to prevent stale asynchronous
-      // renders from overwriting newer content.
-      const stagingEl = document.createElement("div");
-
-      const isCurrentRender = () => {
-        const current = renderMap.get(el);
-        return (
-          !isDestroyed() &&
-          el.isConnected &&
-          current?.id === id
-        );
-      };
-
-      // Use the active note as the source path so relative links
-      // and embedded resources resolve in the correct context.
-      const sourcePath =
-        app.workspace.getActiveFile()?.path ?? "";
-
-      try {
-        await MarkdownRenderer.render(
-          app,
-          markdownText,
-          stagingEl,
-          sourcePath,
-          component
-        );
-
-        if (!isCurrentRender()) {
-          component.unload();
-          return;
-        }
-
-        // Replace the target's contents with rendered Obsidian Markdown.
-        el.replaceChildren(...Array.from(stagingEl.childNodes));
-      } catch (error) {
-        component.unload();
-
-        if (isCurrentRender()) {
-          console.error("[CDS] Markdown rendering failed:", error);
-          el.replaceChildren();
-        }
-
-        return;
+      .cds-markdown-preview :is(
+        h1, h2, h3, h4, h5, h6
+      ) {
+        line-height: 1.2;
+        margin-block: 0;
       }
+    `;
 
-      // Register lifecycle cleanup.
-      cleanups.push(() => {
-        const current = renderMap.get(el);
+    targetEl.appendChild(styleEl);
+  } catch (error) {
+    component.unload();
 
-        if (current?.id === id) {
-          renderMap.delete(el);
-          component.unload();
-          el.replaceChildren();
-        } else {
-          component.unload();
-        }
-      });
-    },
+    if (isCurrentRender()) {
+      console.error("[CDS] Markdown rendering failed:", error);
+      targetEl.replaceChildren();
+    }
+
+    return;
+  }
+
+  // Register lifecycle cleanup.
+  cleanups.push(() => {
+    const current = renderMap.get(targetEl);
+
+    if (current?.id === id) {
+      renderMap.delete(targetEl);
+      component.unload();
+      targetEl.replaceChildren();
+    } else {
+      component.unload();
+    }
+  });
+},
+
+
 
     // 6. Spawns a lightweight single-input popup modal to gather text input
     prompt: (title: string, placeholder = "", callback: (value: string) => void) => {
