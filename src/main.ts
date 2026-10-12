@@ -74,7 +74,10 @@ class CanvasViewWidget extends WidgetType {
 
     let cssCode = "";
     let htmlCode = "";
-    let jsCode = this.source;
+let jsCode = this.source.replace(
+  /\n?(`{3,}|~{3,})[ \t]*$/,
+  ""
+);
 
     const parts = this.source.split(
       /\/\/\s*--- (CSS|HTML|JS) ---/
@@ -90,6 +93,9 @@ class CanvasViewWidget extends WidgetType {
         if (type === "JS") jsCode = content;
       }
     }
+
+    // Remove the closing Markdown fence from the extracted JS.
+jsCode = jsCode.replace(/\s*(`{3,}|~{3,})\s*$/, "");
 
     container.innerHTML = htmlCode;
 
@@ -169,6 +175,8 @@ class CanvasViewWidget extends WidgetType {
       if (isDestroyed || !container.isConnected) return;
 
       try {
+        console.log("[canvasview] JS length:", jsCode.length);
+        console.log("[canvasview] JS source:\n", jsCode);
         const dvApi = (this.app as any)
           .plugins?.plugins?.dataview?.api;
 
@@ -185,17 +193,35 @@ class CanvasViewWidget extends WidgetType {
           db,
         };
 
-        const executeFn = new Function(
-          "container",
-          "htmlContent",
-          "app",
-          "notice",
-          "dv",
-          "db",
-          "$",
-          "$$",
-          jsCode
-        );
+        let executeFn: Function;
+
+        try {
+          executeFn = new Function(
+            "container",
+            "htmlContent",
+            "app",
+            "notice",
+            "dv",
+            "db",
+            "$",
+            "$$",
+            jsCode
+          );
+        } catch (err) {
+          console.error(
+            "[canvasview] Compilation failed. Source length:",
+            jsCode.length
+          );
+          console.error(
+            "[canvasview] Source ending:",
+            JSON.stringify(jsCode.slice(-300))
+          );
+          console.error(
+            "[canvasview] Full failing source:",
+            jsCode
+          );
+          throw err;
+        }
 
         executeFn.call(
           dataviewContext,
