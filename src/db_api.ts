@@ -1,4 +1,4 @@
-// runtime.ts
+// db_api.ts
 import { App, Notice, TFile, EventRef } from 'obsidian';
 
 export interface RuntimeOptions {
@@ -7,6 +7,7 @@ export interface RuntimeOptions {
   cleanups: Array<() => void>;
   isDestroyed?: () => boolean;
 }
+
 
 export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroyed = () => false }: RuntimeOptions) {
   const $ = (sel: string) => containerEl.querySelector(sel);
@@ -135,7 +136,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       return unbind;
     },
 
-    // --- ADDED NATIVE ONKEYUP HELPER ---
     onKeyUp: (keys: string | string[] | ((e: KeyboardEvent) => void), fn?: (e: KeyboardEvent) => void, options?: boolean | AddEventListenerOptions) => {
       let targetFn: (e: KeyboardEvent) => void;
       let keyList: string[] | null = null;
@@ -348,6 +348,7 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
     toggleProp: async (path: string, prop: string): Promise<boolean> => {
       return db.updateNote(path, (fm) => { fm[prop] = !fm[prop]; });
     },
+
     query: (source: string, fallback: any[] = []): any[] => {
       if (isDestroyed()) return fallback;
       
@@ -480,7 +481,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       target.innerHTML = items.map(templateFn).join("");
     },
 
-    // 1. Copy text to clipboard with automatic notification
     copyToClipboard: async (text: string): Promise<boolean> => {
       if (isDestroyed()) return false;
       try {
@@ -493,7 +493,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       }
     },
 
-    // 2. Debounce helper for search inputs and filters
     debounce: <T extends (...args: any[]) => void>(fn: T, delayMs = 300): ((...args: Parameters<T>) => void) => {
       let timeoutId: any = null;
       const debounced = (...args: Parameters<T>) => {
@@ -505,7 +504,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       return debounced;
     },
 
-    // 3. Read raw markdown content of any vault note
     readNote: async (path: string): Promise<string | null> => {
       if (isDestroyed()) return null;
       try {
@@ -517,8 +515,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       return null;
     },
 
-
-// 4. Multi-style Confetti (burst, fireworks, fountain, shockwave)
     confetti: (x?: number, y?: number, type: 'burst' | 'fireworks' | 'fountain' | 'shockwave' = 'burst') => {
       if (isDestroyed()) return;
 
@@ -527,7 +523,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       const colors = ['#bc85ffff', '#6aa2fdff', '#8bf581ff', '#ffdc91ff', '#ff729aff'];
 
       if (type === 'fountain') {
-        // Upward spray arc
         const count = 45;
         for (let i = 0; i < count; i++) {
           const p = document.createElement('div');
@@ -589,7 +584,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
           db.beep(700, 0.1, 'sine', 0.1);
         }, 600);
       } else {
-        // Default 'burst'
         const particleCount = 50;
         for (let i = 0; i < particleCount; i++) {
           const p = document.createElement('div');
@@ -647,6 +641,184 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
         bar.appendChild(btn);
       });
       onSelect(active);
+    },
+
+    // --- NEW IMPLEMENTED METHODS ---
+
+    // 1. Spawns a quick modal dropdown list to select an option
+    selectPrompt: (title: string, options: Array<string | { label: string; value: any }>, callback: (selected: any) => void) => {
+      if (isDestroyed()) return;
+      db.modal(title, (bodyEl, closeFn) => {
+        bodyEl.style.cssText = "padding: 8px 0; overflow-y: auto; max-height: 60vh;";
+        const listEl = document.createElement("div");
+        listEl.style.cssText = "display: flex; flex-direction: column; gap: 2px;";
+        
+        options.forEach(opt => {
+          const label = typeof opt === 'string' ? opt : opt.label;
+          const val = typeof opt === 'string' ? opt : opt.value;
+          
+          const itemEl = document.createElement("div");
+          itemEl.innerText = label;
+          itemEl.style.cssText = "padding: 10px 16px; cursor: pointer; border-radius: 4px; font-size: 0.95rem; color: var(--text-normal); transition: background 0.1s;";
+          itemEl.onmouseenter = () => itemEl.style.background = "var(--background-modifier-hover)";
+          itemEl.onmouseleave = () => itemEl.style.background = "transparent";
+          itemEl.onclick = () => {
+            if (!isDestroyed()) {
+              closeFn();
+              callback(val);
+            }
+          };
+          listEl.appendChild(itemEl);
+        });
+        bodyEl.appendChild(listEl);
+      });
+    },
+
+    // 2. Programmatically adds a tag to any markdown note's frontmatter
+    addTag: async (fileOrPath: TFile | string, tag: string): Promise<boolean> => {
+      if (isDestroyed()) return false;
+      const cleanTag = tag.startsWith('#') ? tag.slice(1) : tag;
+      return db.updateNote(fileOrPath, (fm) => {
+        if (!fm.tags) {
+          fm.tags = [cleanTag];
+        } else if (Array.isArray(fm.tags)) {
+          if (!fm.tags.includes(cleanTag)) {
+            fm.tags.push(cleanTag);
+          }
+        } else if (typeof fm.tags === 'string') {
+          const existing = fm.tags.split(',').map((s: string) => s.trim());
+          if (!existing.includes(cleanTag)) {
+            existing.push(cleanTag);
+            fm.tags = existing;
+          }
+        }
+      });
+    },
+
+    // --- UPDATED CUSTOM MODAL FULLSCREEN ---
+    toggleFullscreen: (selector?: string | HTMLElement, title = "Fullscreen View"): void => {
+      if (isDestroyed()) return;
+
+      // Keep closure state to track active modal fullscreen instance
+      let activeBackdrop: HTMLElement | null = (db as any)._fullscreenBackdrop || null;
+      let originalParent: HTMLElement | null = (db as any)._fullscreenParent || null;
+      let originalNextSibling: ChildNode | null = (db as any)._fullscreenSibling || null;
+      let savedTargetEl: HTMLElement | null = (db as any)._fullscreenTarget || null;
+
+      // If already active, close and restore element to its original DOM position
+      if (activeBackdrop) {
+        if (savedTargetEl && originalParent) {
+          if (originalNextSibling) {
+            originalParent.insertBefore(savedTargetEl, originalNextSibling);
+          } else {
+            originalParent.appendChild(savedTargetEl);
+          }
+        }
+        activeBackdrop.remove();
+        (db as any)._fullscreenBackdrop = null;
+        (db as any)._fullscreenParent = null;
+        (db as any)._fullscreenSibling = null;
+        (db as any)._fullscreenTarget = null;
+        return;
+      }
+
+      // Otherwise, open it in a custom modal fullscreen overlay
+      const el = !selector 
+        ? containerEl 
+        : (typeof selector === 'string' ? containerEl.querySelector(selector) || document.querySelector(selector) : selector) as HTMLElement;
+      
+      if (!el) return;
+
+      (db as any)._fullscreenTarget = el;
+      (db as any)._fullscreenParent = el.parentElement;
+      (db as any)._fullscreenSibling = el.nextSibling;
+
+      const backdrop = document.createElement("div");
+      backdrop.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;";
+
+      const modalEl = document.createElement("div");
+      modalEl.style.cssText = "background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);width:95vw;max-width:1200px;height:90vh;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-interface);color:var(--text-normal);";
+
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--background-modifier-border);font-weight:600;font-size:1rem;";
+      header.innerText = title;
+
+      const closeBtn = document.createElement("button");
+      closeBtn.innerHTML = "&times;";
+      closeBtn.style.cssText = "background:transparent;border:none;outline:none;box-shadow:none;color:var(--text-muted);font-size:1.3rem;cursor:pointer;padding:2px 6px;border-radius:4px;";
+      
+      const close = () => {
+        const target = (db as any)._fullscreenTarget;
+        const parent = (db as any)._fullscreenParent;
+        const sibling = (db as any)._fullscreenSibling;
+
+        if (target && parent) {
+          if (sibling) {
+            parent.insertBefore(target, sibling);
+          } else {
+            parent.appendChild(target);
+          }
+        }
+        backdrop.remove();
+        (db as any)._fullscreenBackdrop = null;
+        (db as any)._fullscreenParent = null;
+        (db as any)._fullscreenSibling = null;
+        (db as any)._fullscreenTarget = null;
+      };
+
+      closeBtn.onclick = close;
+      backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+      header.appendChild(closeBtn);
+      modalEl.appendChild(header);
+
+      const bodyEl = document.createElement("div");
+      bodyEl.style.cssText = "padding:16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;";
+      bodyEl.appendChild(el);
+      modalEl.appendChild(bodyEl);
+
+      backdrop.appendChild(modalEl);
+      document.body.appendChild(backdrop);
+      
+      (db as any)._fullscreenBackdrop = backdrop;
+
+      cleanups.push(() => {
+        if ((db as any)._fullscreenBackdrop) close();
+      });
+    },
+
+    // 4. Performs a full-text search across body contents of all markdown files
+    searchVaultText: async (keyword: string): Promise<Array<{ path: string; name: string; basename: string; snippet: string }>> => {
+      if (isDestroyed() || !keyword) return [];
+      const results: Array<{ path: string; name: string; basename: string; snippet: string }> = [];
+      const files = app.vault.getMarkdownFiles();
+      const lowerKeyword = keyword.toLowerCase();
+
+      for (const file of files) {
+        if (isDestroyed()) break;
+        try {
+          const content = await app.vault.cachedRead(file);
+          const lowerContent = content.toLowerCase();
+          let index = lowerContent.indexOf(lowerKeyword);
+          
+          if (index !== -1) {
+            const start = Math.max(0, index - 40);
+            const end = Math.min(content.length, index + keyword.length + 40);
+            let snippet = content.substring(start, end).replace(/\n/g, ' ');
+            if (start > 0) snippet = '...' + snippet;
+            if (end < content.length) snippet = snippet + '...';
+
+            results.push({
+              path: file.path,
+              name: file.name,
+              basename: file.basename,
+              snippet
+            });
+          }
+        } catch (e) {
+          // Skip unreadable files safely
+        }
+      }
+      return results;
     }
   };
 
