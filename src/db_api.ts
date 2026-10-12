@@ -1,5 +1,5 @@
 // db_api.ts
-import { App, Notice, TFile, EventRef } from 'obsidian';
+import { App, Notice, TFile, EventRef, MarkdownRenderer, Component } from 'obsidian';
 
 export interface RuntimeOptions {
   containerEl: HTMLElement;
@@ -8,10 +8,8 @@ export interface RuntimeOptions {
   isDestroyed?: () => boolean;
 }
 
-
 export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroyed = () => false }: RuntimeOptions) {
-  const $ = (sel: string) => containerEl.querySelector(sel);
-  const $$ = (sel: string) => containerEl.querySelectorAll(sel);
+  const $ = (sel: string) => containerEl.querySelector(sel);   const $$ = (sel: string) => containerEl.querySelectorAll(sel);
   let audioCtx: AudioContext | null = null;
 
   const db = {
@@ -645,7 +643,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
 
     // --- NEW IMPLEMENTED METHODS ---
 
-    // 1. Spawns a quick modal dropdown list to select an option
     selectPrompt: (title: string, options: Array<string | { label: string; value: any }>, callback: (selected: any) => void) => {
       if (isDestroyed()) return;
       db.modal(title, (bodyEl, closeFn) => {
@@ -674,7 +671,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       });
     },
 
-    // 2. Programmatically adds a tag to any markdown note's frontmatter
     addTag: async (fileOrPath: TFile | string, tag: string): Promise<boolean> => {
       if (isDestroyed()) return false;
       const cleanTag = tag.startsWith('#') ? tag.slice(1) : tag;
@@ -695,17 +691,14 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       });
     },
 
-    // --- UPDATED CUSTOM MODAL FULLSCREEN ---
     toggleFullscreen: (selector?: string | HTMLElement, title = "Fullscreen View"): void => {
       if (isDestroyed()) return;
 
-      // Keep closure state to track active modal fullscreen instance
       let activeBackdrop: HTMLElement | null = (db as any)._fullscreenBackdrop || null;
       let originalParent: HTMLElement | null = (db as any)._fullscreenParent || null;
       let originalNextSibling: ChildNode | null = (db as any)._fullscreenSibling || null;
       let savedTargetEl: HTMLElement | null = (db as any)._fullscreenTarget || null;
 
-      // If already active, close and restore element to its original DOM position
       if (activeBackdrop) {
         if (savedTargetEl && originalParent) {
           if (originalNextSibling) {
@@ -722,7 +715,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
         return;
       }
 
-      // Otherwise, open it in a custom modal fullscreen overlay
       const el = !selector 
         ? containerEl 
         : (typeof selector === 'string' ? containerEl.querySelector(selector) || document.querySelector(selector) : selector) as HTMLElement;
@@ -786,7 +778,6 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
       });
     },
 
-    // 4. Performs a full-text search across body contents of all markdown files
     searchVaultText: async (keyword: string): Promise<Array<{ path: string; name: string; basename: string; snippet: string }>> => {
       if (isDestroyed() || !keyword) return [];
       const results: Array<{ path: string; name: string; basename: string; snippet: string }> = [];
@@ -814,13 +805,104 @@ export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroy
               snippet
             });
           }
-        } catch (e) {
-          // Skip unreadable files safely
-        }
+        } catch (e) {}
       }
       return results;
+    },
+
+    // 5. Renders real Obsidian markdown directly inside any DOM element
+    markdownToHtml: async (markdownText: string, targetEl: HTMLElement | string): Promise<void> => {
+      if (isDestroyed()) return;
+      const el = typeof targetEl === 'string' ? containerEl.querySelector(targetEl) as HTMLElement : targetEl;
+      if (!el || !(el instanceof HTMLElement)) return;
+      
+      el.innerHTML = "";
+      try {
+        const component = new Component();
+        await MarkdownRenderer.render(app, markdownText, el, "", component);
+        cleanups.push(() => component.unload());
+      } catch (err) {
+        el.innerText = markdownText;
+      }
+    },
+
+    // 6. Spawns a lightweight single-input popup modal to gather text input
+    prompt: (title: string, placeholder = "", callback: (value: string) => void) => {
+      if (isDestroyed()) return;
+      db.modal(title, (bodyEl, closeFn) => {
+        bodyEl.style.cssText = "padding: 16px; display: flex; flex-direction: column; gap: 12px;";
+        
+        const input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = placeholder;
+        input.style.cssText = "width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--background-modifier-border); background: var(--background-primary-alt); color: var(--text-normal); font-size: 0.95rem; outline: none;";
+        
+        const btnContainer = document.createElement("div");
+        btnContainer.style.cssText = "display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;";
+        
+        const cancelBtn = document.createElement("button");
+        cancelBtn.innerText = "Cancel";
+        cancelBtn.style.cssText = "padding: 6px 14px; border-radius: 6px; border: 1px solid var(--background-modifier-border); background: transparent; color: var(--text-normal); cursor: pointer; font-size: 0.9rem;";
+        cancelBtn.onclick = () => closeFn();
+        
+        const submitBtn = document.createElement("button");
+        submitBtn.innerText = "Confirm";
+        submitBtn.style.cssText = "padding: 6px 14px; border-radius: 6px; border: none; background: var(--interactive-accent); color: var(--text-on-accent); cursor: pointer; font-size: 0.9rem; font-weight: 500;";
+        
+        const submit = () => {
+          if (!isDestroyed()) {
+            const val = input.value;
+            closeFn();
+            callback(val);
+          }
+        };
+        
+        submitBtn.onclick = submit;
+        input.onkeydown = (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        };
+        
+        btnContainer.appendChild(cancelBtn);
+        btnContainer.appendChild(submitBtn);
+        bodyEl.appendChild(input);
+        bodyEl.appendChild(btnContainer);
+        
+        setTimeout(() => input.focus(), 50);
+      });
+    },
+
+    // 7. Fetches the entire frontmatter metadata dictionary for a specific vault note
+    getFrontmatter: (path: string): Record<string, any> => {
+      if (isDestroyed() || !path) return {};
+      try {
+        const file = app.vault.getAbstractFileByPath(path);
+        if (file instanceof TFile) {
+          const cache = app.metadataCache.getFileCache(file);
+          return cache?.frontmatter || {};
+        }
+      } catch (e) {}
+      return {};
+    },
+
+    // 8. Safely moves a specified markdown note to the Obsidian vault trash folder
+    deleteNote: async (path: string): Promise<boolean> => {
+      if (isDestroyed() || !path) return false;
+      try {
+        const file = app.vault.getAbstractFileByPath(path);
+        if (file instanceof TFile) {
+          await app.vault.trash(file, true);
+          db.notify(`Moved to trash: ${file.basename}`);
+          return true;
+        }
+      } catch (err: any) {
+        db.notify(`Failed to delete note: ${err.message}`);
+      }
+      return false;
     }
   };
 
-  return { db, $, $$ };
+  return { db, $,$$ };
 }

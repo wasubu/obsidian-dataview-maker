@@ -146,18 +146,24 @@ export class StudioView extends ItemView {
     }
 
     if (mode === 'html') {
-      const tags = Array.from(code.matchAll(/<\/?([a-zA-Z0-9-]+)[^>]*>/g));
+      // Strip HTML comments first so they don't break the stack
+      const cleanCode = code.replace(/<!--[\s\S]*?-->/g, '');
+
+      // Strip contents inside <textarea>, <script>, and <style> tags
+      const sanitizedCode = cleanCode.replace(/<(textarea|script|style)[^>]*>[\s\S]*?<\/\1>/gi, '');
+
+      const tags = Array.from(sanitizedCode.matchAll(/<\/?([a-zA-Z0-9-]+)[^>]*>/g));
       const stack: { tag: string; line: number }[] = [];
       const selfClosing = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
-      
-      const lines = code.split('\n');
+
+      const lines = sanitizedCode.split('\n');
       for (const m of tags) {
         const full = m[0];
         const name = m[1] ? m[1].toLowerCase() : '';
-        if (selfClosing.has(name) || full.endsWith('/>')) continue;
+        if (selfClosing.has(name) || full.endsWith('/>') || full.startsWith('<!')) continue;
 
         const charIdx = m.index || 0;
-        const lineNum = code.substring(0, charIdx).split('\n').length;
+        const lineNum = sanitizedCode.substring(0, charIdx).split('\n').length;
 
         if (full.startsWith('</')) {
           if (stack.length === 0 || stack[stack.length - 1]?.tag !== name) {
