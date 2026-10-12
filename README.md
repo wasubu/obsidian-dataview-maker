@@ -13,11 +13,11 @@ Description: Instantly expands your dashboard container or canvas into full scre
 - [x] **db.searchVaultText(keyword)**  
 Description: Performs a full-text search across the body content of all markdown files in your vault, returning matching file paths, names, and text snippets.
 
-- [x] **db.markdownToHtml(markdownText, targetEl)**  
+- [ ] **db.markdownToHtml(markdownText, targetEl)**  
 Description: Renders real Obsidian markdown (including wikilinks, callouts, bold text, and formatting) directly inside any DOM element in your custom UI.
 - [x] **db.prompt(title, placeholder, callback)**  
 Description: Spawns a lightweight single-input popup modal to quickly gather text input from the user (such as renaming an item or adding a quick note) and passes it to a callback.
-- [ ] **db.getFrontmatter(path)**  
+- [x] **db.getFrontmatter(path)**  
 Description: Fetches the entire frontmatter metadata dictionary for a specific vault note instantly by its file path.
 - [ ] **db.deleteNote(path)**  
 Description: Safely moves a specified markdown note to the Obsidian vault trash folder.
