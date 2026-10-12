@@ -271,6 +271,7 @@ jsCode = jsCode.replace(/\s*(`{3,}|~{3,})\s*$/, "");
 // CodeMirror ViewPlugin Factory
 // ==========================================
 
+
 function createCanvasViewPlugin(app: App) {
   const decorations = EditorView.decorations.compute(
     ["doc"],
@@ -305,12 +306,9 @@ function createCanvasViewPlugin(app: App) {
         let closingLineNo = lineNo + 1;
 
         while (closingLineNo <= doc.lines) {
-          const candidate = doc.line(closingLineNo);
-
-          if (closingPattern.test(candidate.text)) {
+          if (closingPattern.test(doc.line(closingLineNo).text)) {
             break;
           }
-
           closingLineNo++;
         }
 
@@ -318,15 +316,17 @@ function createCanvasViewPlugin(app: App) {
 
         const closingLine = doc.line(closingLineNo);
 
-        // Include the entire fenced block, including its final newline
-        // when one exists.
+        // Replace the complete block, including both fence lines.
         const from = line.from;
-        const to =
-          closingLine.to < doc.length
-            ? closingLine.to + 1
-            : closingLine.to;
+        const to = closingLine.to;
 
-        const source = doc.sliceString(from, to);
+        // Pass only the content between the opening and closing fences.
+        const contentFrom = line.to < closingLine.from
+          ? line.to + 1
+          : line.to;
+        const contentTo = closingLine.from;
+
+        const source = doc.sliceString(contentFrom, contentTo);
 
         widgets.push(
           Decoration.replace({
@@ -335,7 +335,6 @@ function createCanvasViewPlugin(app: App) {
           }).range(from, to)
         );
 
-        // Skip the lines belonging to this block.
         lineNo = closingLineNo;
       }
 
@@ -345,6 +344,7 @@ function createCanvasViewPlugin(app: App) {
 
   return decorations;
 }
+
 
 // ==========================================
 // Main Plugin Class
@@ -365,13 +365,9 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
     // Register Edit Mode extension ONCE
     // ------------------------------------------
 
-    const boundCanvasPlugin = createCanvasViewPlugin(
-      this.app
-    );
+    const boundCanvasPlugin = createCanvasViewPlugin(this.app);
+    this.registerEditorExtension(boundCanvasPlugin);
 
-    this.registerEditorExtension(
-      createCanvasViewPlugin(this.app)
-    );
 
     // ------------------------------------------
     // Reading Mode code block processor

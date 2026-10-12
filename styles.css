@@ -422,3 +422,7 @@ textarea.cds-textarea-layer::selection {
   filter: brightness(1.1) !important;
   transform: translateY(-1px) !important;
 }
+
+.cm-preview-code-block.cm-lang-canvasview > .embed-actions {
+  display: none !important;
+}
