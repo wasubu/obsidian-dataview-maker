@@ -160,7 +160,7 @@ const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
           el.empty();
           const placeholder = el.createDiv({ cls: 'cds-edit-placeholder-line' });
           placeholder.textContent = '---advanceDB here---';
-          placeholder.style.cssText = 'color: var(--text-muted); font-size: 0.8rem; font-family: var(--font-monospace); padding: 4px 0; text-align: center; opacity: 0.7; user-select: none;';
+placeholder.style.cssText = 'color: var(--text-faint); font-size: 0.8rem; font-family: var(--font-monospace); padding: 8px 16px; text-align: center; background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 12px; user-select: none; display: block; margin: 6px 0;';
           return;
         }
 
