@@ -192,6 +192,11 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
                 super(containerEl);
               }
               onunload() {
+                const session = canvasViewSessions.get(sessionKey);
+                if (session) {
+                  try { session.teardownFn?.(); } catch {}
+                  canvasViewSessions.delete(sessionKey);
+                }
                 if (container.parentElement === el) {
                   container.remove();
                 }
