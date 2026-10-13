@@ -5,7 +5,8 @@ export interface RuntimeOptions {
   containerEl: HTMLElement;
   app: App;
   cleanups: Array<() => void>;
-  isDestroyed?: () => boolean;
+  isDestroyed: () => boolean;
+  persistentData?: Record<string, any>; // Add this line
 }
 
 export function createRuntimeEnvironment({ containerEl, app, cleanups, isDestroyed = () => false }: RuntimeOptions) {
