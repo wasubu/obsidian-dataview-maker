@@ -119,14 +119,14 @@ export class StudioView extends ItemView {
     const removeVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Remove Last Ver' });
     const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Update Note', attr: { style: 'margin-left: auto;' } });
 
-    // Scan vault for notes containing +++canvasview
+    // Scan vault for notes containing ```canvasview
     (async () => {
       fileSelect.empty();
       fileSelect.createEl('option', { text: '-- Select CanvasView Note --', attr: { value: '' } });
       for (const file of this.app.vault.getMarkdownFiles()) {
         try {
           const content = await this.app.vault.cachedRead(file);
-          if (content.includes('+++canvasview')) {
+          if (content.includes('```canvasview')) {
             fileSelect.createEl('option', { text: file.path, attr: { value: file.path } });
           }
         } catch (e) {}
@@ -289,8 +289,8 @@ export class StudioView extends ItemView {
         this.currentFile = file;
         const content = await this.app.vault.read(file);
 
-        // Match +++canvasview block
-        const match = content.match(/\+{3,}[ \t]*canvasview(?:[ \t]+[^\r\n]*)?\r?\n([\s\S]*?)\r?\n[ \t]*\+{3,}/);
+        // Match ```canvasview block
+        const match = content.match(/```[ \t]*canvasview(?:[ \t]+[^\r\n]*)?\r?\n([\s\S]*?)\r?\n[ \t]*```/);
         if (match && match[1]) {
           const code = match[1];
 
@@ -467,7 +467,7 @@ export class StudioView extends ItemView {
       }
       try {
         const wrappedContent = [
-          "+++canvasview",
+          "```canvasview",
           "// --- CSS ---",
           cssCode,
           "",
@@ -476,7 +476,7 @@ export class StudioView extends ItemView {
           "",
           "// --- JS ---",
           jsCode,
-          "+++"
+          "```"
         ].join('\n');
 
         await this.app.vault.modify(this.currentFile, wrappedContent);
