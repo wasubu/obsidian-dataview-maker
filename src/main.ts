@@ -150,13 +150,18 @@ export default class CustomDatabaseStudioPlugin extends Plugin {
     );
 
     // Reading Mode code block processor only
-    this.registerMarkdownCodeBlockProcessor(
+this.registerMarkdownCodeBlockProcessor(
       "canvasview",
       (source, el, ctx) => {
-        // Skip rendering entirely if we are in Edit mode (Live Preview / Source mode)
-        const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (activeView && activeView.getMode() !== 'preview') {
-          return; 
+const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const isEditing = activeView && activeView.getMode() !== 'preview';
+
+        if (isEditing) {
+          el.empty();
+          const placeholder = el.createDiv({ cls: 'cds-edit-placeholder-line' });
+          placeholder.textContent = '---advanceDB here---';
+          placeholder.style.cssText = 'color: var(--text-muted); font-size: 0.8rem; font-family: var(--font-monospace); padding: 4px 0; text-align: center; opacity: 0.7; user-select: none;';
+          return;
         }
 
         try {
