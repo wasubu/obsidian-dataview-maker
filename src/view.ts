@@ -11,6 +11,7 @@ export const VIEW_TYPE_STUDIO = "custom-database-studio-view";
 export class StudioView extends ItemView {
   plugin: CustomDatabaseStudioPlugin;
   currentFile: TFile | null = null;
+  currentBlockIndex: number = 0;
   autocompleteEngine: AutocompleteEngine;
 
   // Universal lifecycle registry (cleans up user animations, timers, listeners on reload)
@@ -65,6 +66,11 @@ export class StudioView extends ItemView {
     return { html, css, js };
   }
 
+  private getStorageKey(): string {
+    if (!this.currentFile) return "";
+    return `${this.currentFile.path}::block-${this.currentBlockIndex}`;
+  }
+
   async onOpen() {
     await this.autocompleteEngine.indexVault();
 
@@ -89,11 +95,12 @@ export class StudioView extends ItemView {
     newVersionBtn.style.display = 'none';
 
     const checkUnsavedChanges = () => {
-      if (!this.currentFile) {
+      const storageKey = this.getStorageKey();
+      if (!storageKey) {
         newVersionBtn.style.display = 'none';
         return;
       }
-      const versions = this.plugin.data.versions[this.currentFile.path] || [];
+      const versions = this.plugin.data.versions[storageKey] || [];
       const idx = parseInt(versionSelect.value, 10);
       
       if (isNaN(idx) || !versions[idx]) {
@@ -119,15 +126,22 @@ export class StudioView extends ItemView {
     const removeVersionBtn = toolbar.createEl('button', { cls: 'cds-tab-btn', text: 'Remove Last Ver' });
     const saveBtn = toolbar.createEl('button', { cls: 'cds-save-btn', text: '💾 Update Note', attr: { style: 'margin-left: auto;' } });
 
-    // Scan vault for notes containing ```canvasview
+    // Scan vault for notes containing ```canvasview and enumerate multiple blocks
     (async () => {
       fileSelect.empty();
       fileSelect.createEl('option', { text: '-- Select CanvasView Note --', attr: { value: '' } });
       for (const file of this.app.vault.getMarkdownFiles()) {
         try {
           const content = await this.app.vault.cachedRead(file);
-          if (content.includes('```canvasview')) {
-            fileSelect.createEl('option', { text: file.path, attr: { value: file.path } });
+          const matches = [...content.matchAll(/```[ \t]*canvasview(?:[ \t]+[^\r\n]*)?\r?\n([\s\S]*?)\r?\n[ \t]*```/g)];
+          if (matches.length > 0) {
+            if (matches.length === 1) {
+              fileSelect.createEl('option', { text: file.path, attr: { value: `${file.path}::0` } });
+            } else {
+              matches.forEach((_, idx) => {
+                fileSelect.createEl('option', { text: `${file.path} (${idx + 1})`, attr: { value: `${file.path}::${idx}` } });
+              });
+            }
           }
         } catch (e) {}
       }
@@ -263,9 +277,9 @@ export class StudioView extends ItemView {
       }
     };
 
-    const updateVersionDropdown = (path: string, selectedTag?: string) => {
+    const updateVersionDropdown = (storageKey: string, selectedTag?: string) => {
       versionSelect.empty();
-      const versions = this.plugin.data.versions[path] || [];
+      const versions = this.plugin.data.versions[storageKey] || [];
       if (versions.length === 0) {
         versionSelect.createEl('option', { text: 'No versions yet', attr: { value: '', disabled: true } });
         return;
@@ -278,19 +292,30 @@ export class StudioView extends ItemView {
       });
     };
 
-    fileSelect.onchange = async () => {
-      const selectedPath = fileSelect.value;
-      if (!selectedPath) {
+fileSelect.onchange = async () => {
+      const selectedValue = fileSelect.value;
+      if (!selectedValue) {
         this.currentFile = null;
+        this.currentBlockIndex = 0;
         return;
       }
+
+      const parts = selectedValue.split('::');
+      const selectedPath = parts[0];
+      const blockIdxStr = parts[1];
+
+      if (!selectedPath) return;
+
+      this.currentBlockIndex = parseInt(blockIdxStr || '0', 10);
+
       const file = this.app.vault.getAbstractFileByPath(selectedPath);
       if (file instanceof TFile) {
         this.currentFile = file;
         const content = await this.app.vault.read(file);
 
-        // Match ```canvasview block
-        const match = content.match(/```[ \t]*canvasview(?:[ \t]+[^\r\n]*)?\r?\n([\s\S]*?)\r?\n[ \t]*```/);
+        const matches = [...content.matchAll(/```[ \t]*canvasview(?:[ \t]+[^\r\n]*)?\r?\n([\s\S]*?)\r?\n[ \t]*```/g)];
+        const match = matches[this.currentBlockIndex];
+
         if (match && match[1]) {
           const code = match[1];
 
@@ -323,8 +348,9 @@ export class StudioView extends ItemView {
           jsEditor.setValue(jsCode);
         }
 
-        if (!this.plugin.data.versions[file.path]) {
-          this.plugin.data.versions[file.path] = [{
+        const storageKey = this.getStorageKey();
+        if (!this.plugin.data.versions[storageKey]) {
+          this.plugin.data.versions[storageKey] = [{
             tag: "v0 - Initial",
             html: htmlCode,
             css: cssCode,
@@ -334,10 +360,10 @@ export class StudioView extends ItemView {
           await this.plugin.saveStudioData();
         }
 
-        const versions = this.plugin.data.versions[file.path] || [];
+        const versions = this.plugin.data.versions[storageKey] || [];
         const latestTag = versions[versions.length - 1]?.tag;
-        updateVersionDropdown(file.path, latestTag);
-        new Notice(`Loaded note: ${file.name}`);
+        updateVersionDropdown(storageKey, latestTag);
+        new Notice(`Loaded note: ${file.name} (Block ${this.currentBlockIndex + 1})`);
         checkUnsavedChanges();
         runCode();
       }
@@ -345,8 +371,9 @@ export class StudioView extends ItemView {
 
     versionSelect.onchange = () => {
       const idx = parseInt(versionSelect.value, 10);
-      if (!this.currentFile || isNaN(idx)) return;
-      const versions = this.plugin.data.versions[this.currentFile.path] || [];
+      const storageKey = this.getStorageKey();
+      if (!storageKey || isNaN(idx)) return;
+      const versions = this.plugin.data.versions[storageKey] || [];
       const selectedVersion = versions[idx];
       const resolved = this.resolveVersion(versions, idx);
 
@@ -364,15 +391,15 @@ export class StudioView extends ItemView {
     };
 
     newVersionBtn.onclick = () => {
-      if (!this.currentFile) {
+      const storageKey = this.getStorageKey();
+      if (!storageKey) {
         new Notice("Please select a note from the dropdown first!");
         return;
       }
-      const path = this.currentFile.path;
-      if (!this.plugin.data.versions[path]) {
-        this.plugin.data.versions[path] = [];
+      if (!this.plugin.data.versions[storageKey]) {
+        this.plugin.data.versions[storageKey] = [];
       }
-      const versionsArray = this.plugin.data.versions[path];
+      const versionsArray = this.plugin.data.versions[storageKey];
       const nextVersionNum = versionsArray ? versionsArray.length : 0;
       const currentSelectedIdx = parseInt(versionSelect.value, 10) || (versionsArray.length - 1);
       const parentResolved = this.resolveVersion(versionsArray, currentSelectedIdx);
@@ -388,23 +415,23 @@ export class StudioView extends ItemView {
           timestamp: Date.now()
         };
 
-        this.plugin.data.versions[path]!.push(newSnapshot);
+        this.plugin.data.versions[storageKey]!.push(newSnapshot);
         await this.plugin.saveStudioData();
         checkUnsavedChanges();
 
-        updateVersionDropdown(path, tag);
+        updateVersionDropdown(storageKey, tag);
         new Notice(`Created delta version ${tag}`);
       }).open();
     };
 
     renameVersionBtn.onclick = () => {
-      if (!this.currentFile) {
+      const storageKey = this.getStorageKey();
+      if (!storageKey) {
         new Notice("Please select a note first!");
         return;
       }
-      const path = this.currentFile.path;
       const idx = parseInt(versionSelect.value, 10);
-      const versions = this.plugin.data.versions[path];
+      const versions = this.plugin.data.versions[storageKey];
 
       if (isNaN(idx) || !versions || !versions[idx]) {
         new Notice("Please select a version to rename!");
@@ -416,18 +443,18 @@ export class StudioView extends ItemView {
       new VersionPromptModal(this.app, "Rename Version", currentTag, async (newTag) => {
         versions[idx]!.tag = newTag;
         await this.plugin.saveStudioData();
-        updateVersionDropdown(path, newTag);
+        updateVersionDropdown(storageKey, newTag);
         new Notice(`Renamed version to ${newTag}`);
       }).open();
     };
 
     removeVersionBtn.onclick = () => {
-      if (!this.currentFile) {
+      const storageKey = this.getStorageKey();
+      if (!storageKey) {
         new Notice("Please select a note first!");
         return;
       }
-      const path = this.currentFile.path;
-      const versions = this.plugin.data.versions[path];
+      const versions = this.plugin.data.versions[storageKey];
 
       if (!versions || versions.length <= 1) {
         new Notice("Cannot remove the last remaining version!");
@@ -454,19 +481,22 @@ export class StudioView extends ItemView {
           jsEditor.setValue(jsCode);
           runCode();
 
-          updateVersionDropdown(path, versions[newLatestIdx]?.tag);
+          updateVersionDropdown(storageKey, versions[newLatestIdx]?.tag);
           new Notice("Successfully removed the last version.");
         }
       ).open();
     };
 
-    saveBtn.onclick = async () => {
+saveBtn.onclick = async () => {
       if (!this.currentFile) {
         new Notice("Please select and load a vault note first!");
         return;
       }
       try {
-        const wrappedContent = [
+        const fileContent = await this.app.vault.read(this.currentFile);
+        const matches = [...fileContent.matchAll(/(```[ \t]*canvasview(?:[ \t]+[^\r\n]*)?\r?\n[\s\S]*?\r?\n[ \t]*```)/g)];
+
+        const newBlockContent = [
           "```canvasview",
           "// --- CSS ---",
           cssCode,
@@ -479,8 +509,20 @@ export class StudioView extends ItemView {
           "```"
         ].join('\n');
 
-        await this.app.vault.modify(this.currentFile, wrappedContent);
-        new Notice(`Successfully saved to ${this.currentFile.name}!`);
+        let updatedContent = fileContent;
+        const targetMatch = matches[this.currentBlockIndex];
+
+        if (targetMatch && targetMatch[0] !== undefined) {
+          const fullMatchStr = targetMatch[0];
+          const matchIndex = targetMatch.index ?? 0;
+          updatedContent = fileContent.substring(0, matchIndex) + newBlockContent + fileContent.substring(matchIndex + fullMatchStr.length);
+        } else {
+          // Fallback if index not found
+          updatedContent += "\n\n" + newBlockContent;
+        }
+
+        await this.app.vault.modify(this.currentFile, updatedContent);
+        new Notice(`Successfully saved to ${this.currentFile.name} (Block ${this.currentBlockIndex + 1})!`);
         checkUnsavedChanges();
       } catch (err: any) {
         new Notice("Failed to save: " + err.message);
